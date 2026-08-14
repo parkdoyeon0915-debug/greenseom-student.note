@@ -1,0 +1,56 @@
+name: Add admin student kick
+
+on:
+  push:
+    paths:
+      - '.github/workflows/admin-kick.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch admin kick feature
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('server.js')
+          s=p.read_text(encoding='utf-8')
+          login_old='if(!u||!bcrypt.compareSync(req.body.password,u.password_hash))return res.status(401).json({error:"아이디 또는 비밀번호가 맞지 않습니다."});'
+          login_new='if(!u||u.role==="suspended"||!bcrypt.compareSync(req.body.password,u.password_hash))return res.status(401).json({error:"아이디 또는 비밀번호가 맞지 않습니다."});'
+          if login_old not in s:
+              raise SystemExit('login marker not found')
+          s=s.replace(login_old,login_new,1)
+          marker='app.post("/api/logout",(req,res)=>req.session.destroy(()=>res.json({ok:true})));'
+          endpoint='''app.delete("/api/admin/students/:id",admin,async(req,res)=>{try{const id=Number(req.params.id);if(!Number.isInteger(id)||id<=0)return res.status(400).json({error:"잘못된 학생입니다."});const u=(await q("SELECT id,username,name,role FROM users WHERE id=$1",[id])).rows[0];if(!u)return res.status(404).json({error:"학생을 찾을 수 없습니다."});if(u.role!=="student")return res.status(403).json({error:"학생 계정만 강퇴할 수 있습니다."});await q("UPDATE users SET role='suspended' WHERE id=$1",[id]);try{await q("DELETE FROM user_sessions WHERE sess::jsonb->'user'->>'id'=$1",[String(id)])}catch(e){console.warn("session cleanup",e.message)}res.json({ok:true})}catch(e){console.error("admin kick",e);res.status(500).json({error:"학생 강퇴 처리 중 서버 오류가 발생했습니다."})}});\n\n'''
+          if '/api/admin/students/:id' not in s:
+              if marker not in s:
+                  raise SystemExit('logout marker not found')
+              s=s.replace(marker,endpoint+marker,1)
+          p.write_text(s,encoding='utf-8')
+
+          p=Path('public/admin.html')
+          s=p.read_text(encoding='utf-8')
+          if 'function kickStudent(' not in s:
+              s=s.replace('async function init(){', '''async function kickStudent(id,name){if(!confirm(name+' 학생을 강퇴할까요?\\n\\n강퇴하면 해당 계정의 로그인이 차단됩니다. 기존 기록은 보존됩니다.'))return;const r=await fetch('/api/admin/students/'+id,{method:'DELETE'});const j=await r.json().catch(()=>({}));if(!r.ok)return alert(j.error||'강퇴에 실패했습니다.');document.querySelector('#title').textContent='학생을 선택해주세요.';document.querySelector('#detail').innerHTML='';await init();alert(name+' 학생을 강퇴했습니다.')}\nasync function init(){''',1)
+          old='<button class="btn">기록 보기</button>'
+          new='<div style="display:flex;gap:8px"><button class="btn" onclick="event.stopPropagation();show(${s.id})">기록 보기</button><button class="btn" style="color:#b42318;border-color:#f0b4ae" onclick="event.stopPropagation();kickStudent(${s.id},${JSON.stringify(s.name)})">강퇴</button></div>'
+          if old not in s:
+              raise SystemExit('student button marker not found')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit patch and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.js public/admin.html
+          git commit -m 'Add admin student kick feature' || true
+          rm -f .github/workflows/admin-kick.yml
+          git add -A
+          git commit -m 'Remove temporary admin kick workflow' || true
+          git push

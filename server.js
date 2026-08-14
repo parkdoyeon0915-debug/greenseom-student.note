@@ -77,9 +77,9 @@ function sendBrandedPage(file,res){
   res.type("html").send(html);
 }
 
-app.get("/",(req,res)=>sendBrandedPage("index.html",res));
-app.get("/index.html",(req,res)=>sendBrandedPage("index.html",res));
-app.get("/admin.html",(req,res)=>sendBrandedPage("admin.html",res));
+app.get("/",(req,res)=>{if(req.session.user?.role==="admin")return res.redirect("/admin.html");sendBrandedPage("index.html",res)});
+app.get("/index.html",(req,res)=>{if(req.session.user?.role==="admin")return res.redirect("/admin.html");sendBrandedPage("index.html",res)});
+app.get("/admin.html",(req,res)=>{if(req.session.user?.role!=="admin")return res.redirect("/");sendBrandedPage("admin.html",res)});
 app.use(express.static(path.join(ROOT,"public")));
 
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024},fileFilter:(req,file,cb)=>cb(null,/^image\/(jpeg|png|webp|heic|heif)$/.test(file.mimetype))});

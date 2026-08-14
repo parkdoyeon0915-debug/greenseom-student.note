@@ -3,8 +3,30 @@ const originalReadFileSync=fs.readFileSync;
 
 const style=`<style>
 @media(max-width:560px){
-  .side{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;overflow:visible!important;padding:8px 6px!important;gap:4px!important;}
-  .side .nav{margin:0!important;padding:10px 2px!important;font-size:11px!important;text-align:center!important;white-space:nowrap!important;line-height:1.25!important;}
+  .side{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    scrollbar-width:none!important;
+    padding:8px 10px!important;
+    gap:6px!important;
+    justify-content:flex-start!important;
+  }
+  .side::-webkit-scrollbar{display:none!important}
+  .side .nav{
+    flex:0 0 auto!important;
+    width:auto!important;
+    min-width:max-content!important;
+    margin:0!important;
+    padding:11px 14px!important;
+    font-size:14px!important;
+    text-align:center!important;
+    white-space:nowrap!important;
+    line-height:1.25!important;
+    border-radius:12px!important;
+  }
   .side .nav[data-page="growth"]{display:block!important;}
 }
 </style>`;

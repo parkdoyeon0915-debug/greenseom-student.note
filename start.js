@@ -11,28 +11,31 @@ source=source.replace(
   '["problem_analysis","form_score","completion","expression","composition"]'
 );
 
-// Keep the actual File objects independently of the preview DOM. This is important on
-// mobile Safari/Chrome because the file input may be recreated while showing a preview.
+// Fix photo preview without destroying the file input. The previous preview code
+// replaced box.innerHTML, which removed the selected File from the form before save.
 const originalReadFileSync=fs.readFileSync.bind(fs);
 fs.readFileSync=function(file,encoding){
   const value=originalReadFileSync(file,encoding);
   if(typeof value==='string' && path.basename(String(file))==='index.html'){
     let html=value;
+
     html=html.replace(
-      "async function saveDiag(){const fd=new FormData();fd.append('date',$('#diagDate').value);fd.append('subject',$('#diagSubject').value);const vals=scoreVals();scoreNames.forEach((_,i)=>fd.append(['problem_analysis','form_score','completion','expression','composition'][i],vals[i]));fd.append('notes',$('#diagNotes').value);fd.append('improve',$('#diagImprove').value);if($('#diagFile')?.files[0])fd.append('photo',$('#diagFile').files[0]);const url=currentDiagId?'/api/diagnoses/'+currentDiagId:'/api/diagnoses';",
-      "async function saveDiag(){const fd=new FormData();fd.append('date',$('#diagDate').value);fd.append('subject',$('#diagSubject').value);const vals=scoreVals();scoreNames.forEach((_,i)=>fd.append(['problem_analysis','form_score','completion','expression','composition'][i],vals[i]));fd.append('notes',$('#diagNotes').value);fd.append('improve',$('#diagImprove').value);const diagPhotoFile=window.GREENSUM_DIAG_FILE||$('#diagFile')?.files[0];if(diagPhotoFile)fd.append('photo',diagPhotoFile);const url=currentDiagId?'/api/diagnoses/'+currentDiagId:'/api/diagnoses';"
+      "function filePreview(input,box,placeholder){input.onchange=()=>{const f=input.files[0];if(!f)return;const u=URL.createObjectURL(f);box.innerHTML='<img src=\"'+u+'\">'}}",
+      "function filePreview(input,box,placeholder){input.onchange=()=>{const f=input.files[0];if(!f)return;const u=URL.createObjectURL(f);const img=document.createElement('img');img.src=u;img.alt='선택한 사진';box.innerHTML='';box.appendChild(input);box.appendChild(img)}}"
     );
+
+    // When editing an existing record, keep a file input available so a new photo
+    // can replace the old one. If no new file is selected, the server keeps the old photo.
     html=html.replace(
-      "function newDiag(){currentDiagId=null;",
-      "function newDiag(){window.GREENSUM_DIAG_FILE=null;currentDiagId=null;"
+      "$('#diagPhoto').innerHTML=r.photo?'<img src=\"'+r.photo+'\">':'<input id=\"diagFile\" type=\"file\" accept=\"image/*\"><div id=\"diagPlaceholder\" onclick=\"$(\\'#diagFile\\').click()\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>그림 사진</b><div class=\"muted\">사진 촬영 또는 사진 보관함에서 선택</div></div>';if($('#diagFile'))filePreview($('#diagFile'),$('#diagPhoto'));",
+      "$('#diagPhoto').innerHTML='<input id=\"diagFile\" type=\"file\" accept=\"image/*\" style=\"display:none\"><div id=\"diagExistingPhoto\" style=\"width:100%;height:100%;display:flex;align-items:center;justify-content:center\">'+(r.photo?'<img src=\"'+r.photo+'\">':'<div id=\"diagPlaceholder\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>그림 사진</b><div class=\"muted\">사진 촬영 또는 사진 보관함에서 선택</div></div>')+'</div>';$('#diagExistingPhoto').onclick=function(){ $('#diagFile').click() };filePreview($('#diagFile'),$('#diagPhoto'));"
     );
-    const patch=`<script>(function(){
-      document.addEventListener('change',function(e){
-        var t=e.target;
-        if(t&&t.type==='file'&&t.id==='diagFile'&&t.files&&t.files[0])window.GREENSUM_DIAG_FILE=t.files[0];
-      },true);
-    })();</script>`;
-    html=html.replace('</body>',patch+'</body>');
+
+    html=html.replace(
+      "$('#patPhoto').innerHTML=r.photo?'<img src=\"'+r.photo+'\">':'<input id=\"patFile\" type=\"file\" accept=\"image/*\"><div id=\"patPH\" onclick=\"$(\\'#patFile\\').click()\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>패턴 사진 부착</b></div>';if($('#patFile'))filePreview($('#patFile'),$('#patPhoto'));",
+      "$('#patPhoto').innerHTML='<input id=\"patFile\" type=\"file\" accept=\"image/*\" style=\"display:none\"><div id=\"patExistingPhoto\" style=\"width:100%;height:100%;display:flex;align-items:center;justify-content:center\">'+(r.photo?'<img src=\"'+r.photo+'\">':'<div id=\"patPH\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>패턴 사진 부착</b></div>')+'</div>';$('#patExistingPhoto').onclick=function(){ $('#patFile').click() };filePreview($('#patFile'),$('#patPhoto'));"
+    );
+
     return html;
   }
   return value;

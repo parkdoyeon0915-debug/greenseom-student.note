@@ -7,10 +7,21 @@ const injectedStudent=`<style>
 .teacher-comment-card{background:#fff;border:1px solid #dce2e8;border-radius:12px;padding:14px;margin-top:10px}
 .teacher-comment-name{font-weight:900;margin-bottom:8px}
 .teacher-comment-text{white-space:pre-wrap;line-height:1.65}
-@media(max-width:560px){#teacherCommentsSection{padding:14px;margin-top:18px}.teacher-comment-card{padding:14px}.teacher-comment-text{font-size:15px;line-height:1.7}}
+#studentRecordModal{position:fixed;inset:0;background:#18212b88;display:none;align-items:center;justify-content:center;padding:14px;z-index:99999}
+#studentRecordModal.open{display:flex}
+.student-record-box{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;box-shadow:0 20px 70px #0004}
+.student-record-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;position:sticky;top:0;background:#fff;padding-bottom:10px;z-index:2}
+.student-record-head h2{margin:0;font-size:21px}
+.student-record-photo{width:100%;max-height:48vh;object-fit:contain;background:#f3f5f7;border-radius:12px;margin-bottom:14px}
+.student-record-info{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.student-record-card{border:1px solid #dce2e8;border-radius:12px;padding:13px;background:#fff}
+.student-record-card h4{margin:0 0 8px}
+.student-record-text{white-space:pre-wrap;line-height:1.7}
+.student-record-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+@media(max-width:560px){#teacherCommentsSection{padding:14px;margin-top:18px}.teacher-comment-card{padding:14px}.teacher-comment-text{font-size:15px;line-height:1.7}.student-record-box{padding:14px;border-radius:16px;max-height:94vh}.student-record-head h2{font-size:18px}.student-record-info{grid-template-columns:1fr}.student-record-photo{max-height:42vh}.student-record-card{padding:13px}.student-record-actions{position:sticky;bottom:0;background:#fff;padding-top:10px}}
 </style><script>
 (function(){
-  function esc2(s){return String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
+  function esc2(s){return String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]))}
   function replaceTeacherSection(){
     const ta=document.getElementById('diagTeacher');
     if(!ta||document.getElementById('teacherCommentsSection'))return;
@@ -34,6 +45,32 @@ const injectedStudent=`<style>
   if(baseEdit){window.editDiag=async function(id){baseEdit(id);replaceTeacherSection();await loadComments(id)}}
   const baseNew=window.newDiag;
   if(baseNew){window.newDiag=function(){baseNew();replaceTeacherSection()}}
+
+  function closeRecordModal(){const m=document.getElementById('studentRecordModal');if(m)m.classList.remove('open')}
+  async function openRecordModal(id){
+    const r=Array.isArray(window.diags)?window.diags.find(x=>x.id===id):null;
+    if(!r)return;
+    let comments=[];
+    try{const cr=await fetch('/api/diagnoses/'+id+'/comments',{credentials:'same-origin'});const cj=await cr.json();if(cr.ok)comments=cj.comments||[]}catch(e){}
+    let m=document.getElementById('studentRecordModal');
+    if(!m){m=document.createElement('div');m.id='studentRecordModal';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeRecordModal()})}
+    const commentsHtml=comments.length?comments.map(c=>'<div class="student-record-card"><h4>'+esc2(c.admin_name)+'</h4><div class="student-record-text">'+esc2(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>';
+    m.innerHTML='<div class="student-record-box"><div class="student-record-head"><h2>'+esc2(r.date||'')+' 기록</h2><button class="btn" id="closeStudentRecord">닫기</button></div>'+(r.photo?'<img class="student-record-photo" src="'+esc2(r.photo)+'">':'')+'<div class="student-record-info"><div class="student-record-card"><h4>기본 정보</h4><div>날짜 · '+esc2(r.date||'-')+'</div><div>소재 · '+esc2(r.subject||'-')+'</div><div>총점 · <b>'+esc2(r.total||0)+' / 25</b></div></div><div class="student-record-card"><h4>느낀 점</h4><div class="student-record-text">'+esc2(r.notes||'기록 없음')+'</div></div><div class="student-record-card"><h4>앞으로 개선할 점</h4><div class="student-record-text">'+esc2(r.improve||'기록 없음')+'</div></div><div class="student-record-card"><h4>채점</h4><div>문제 분석 · '+esc2(r.problem_analysis||0)+'/5</div><div>형태 · '+esc2(r.form_score||0)+'/5</div><div>완성도 · '+esc2(r.completion||0)+'/5</div><div>표현력 · '+esc2(r.expression||0)+'/5</div><div>구성 · '+esc2(r.composition||0)+'/5</div></div></div><div style="margin-top:14px"><h3 style="margin:0 0 10px">선생님들의 코멘트</h3>'+commentsHtml+'</div><div class="student-record-actions"><button class="btn" id="editStudentRecord">기록 보기 · 수정</button></div></div>';
+    m.classList.add('open');
+    document.getElementById('closeStudentRecord').onclick=closeRecordModal;
+    document.getElementById('editStudentRecord').onclick=()=>{closeRecordModal();window.editDiag(id)};
+  }
+  function bindRecordClicks(){
+    if(window.__greensumRecordClickBound)return;
+    window.__greensumRecordClickBound=true;
+    document.addEventListener('click',function(e){
+      const card=e.target.closest('#diagList .record,#recentDiag .record');
+      if(!card)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      openRecordModal(Number(card.dataset.id));
+    },true);
+  }
+  bindRecordClicks();
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',replaceTeacherSection);else replaceTeacherSection();
 })();
 </script>`;
@@ -49,7 +86,7 @@ const injectedAdmin=`<style>
 @media(max-width:560px){.admin-comment-input{min-height:360px;font-size:16px;line-height:1.65}.admin-comment-card{padding:14px}.admin-comment-text{font-size:15px}}
 </style><script>
 (function(){
-  function esc3(s){return String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
+  function esc3(s){return String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]))}
   let me=null;
   async function getMe(){if(me)return me;try{const r=await fetch('/api/me',{credentials:'same-origin'});const j=await r.json();me=j.user||null}catch(e){me=null}return me}
   async function fillComments(area,id){

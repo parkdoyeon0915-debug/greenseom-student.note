@@ -3,3 +3,4 @@ require('./ui-overrides.js');
 require('./mobile-growth-nav-fix.js');
 require('./growth-graph.js');
 require('./superadmin.js');
+require('./admin-comment-fix.js');

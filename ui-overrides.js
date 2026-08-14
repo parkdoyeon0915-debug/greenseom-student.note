@@ -23,9 +23,9 @@ const injectedStudent=`<style>
 (function(){
   function esc2(s){return String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]))}
   function teacherLabel(name,id){
-    if(String(id||'')==='doyean7')return '박도연T';
+    if(String(id||'').trim().toLowerCase()==='doyean7')return '도연T';
     const n=String(name||'선생님').trim();
-    if(n==='관리자')return '선생님';
+    if(n==='관리자'||n==='선생님')return '선생님';
     return /T$/.test(n)?n:n+'T';
   }
   function replaceTeacherSection(){
@@ -94,9 +94,9 @@ const injectedAdmin=`<style>
 (function(){
   function esc3(s){return String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]))}
   function teacherLabel(name,id){
-    if(String(id||'')==='doyean7')return '박도연T';
+    if(String(id||'').trim().toLowerCase()==='doyean7')return '도연T';
     const n=String(name||'선생님').trim();
-    if(n==='관리자')return '선생님';
+    if(n==='관리자'||n==='선생님')return '선생님';
     return /T$/.test(n)?n:n+'T';
   }
   let me=null;
@@ -136,7 +136,7 @@ fs.readFileSync=function(file,options){
   let content=originalReadFileSync.call(this,file,options);
   if(typeof file==='string'&&typeof content==='string'){
     if(file.endsWith('/public/index.html')){
-      content=content.replace('</style>',' #diagTeacher{min-height:380px !important;}@media(max-width:560px){#diagTeacher{min-height:360px !important;}}\n</style>');
+      content=content.replace('</style>',' #diagTeacher{min-height:380px !important;}@media(max-width:560px){#diagTeacher{min-height:360px !important;}}\\n</style>');
       content=content.replace('</body>',injectedStudent+'</body>');
     }
     if(file.endsWith('/public/admin.html'))content=content.replace('</body>',injectedAdmin+'</body>');

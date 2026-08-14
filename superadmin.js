@@ -26,6 +26,23 @@ const {Pool}=require('pg');
 const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},max:2,idleTimeoutMillis:30000});
 const q=(text,params=[])=>pool.query(text,params);
 
+// Explicit student URL. `/` redirects an already-logged-in administrator to the
+// admin page, so `/student.html` is provided when an administrator needs to view
+// the student-facing page on the same device.
+app.get('/student.html',(req,res)=>{
+  try{
+    const fs=require('fs'),path=require('path');
+    let html=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8').replaceAll('GREENSEOM','GREENSUM');
+    if(typeof html==='string'){
+      html=html.replace('</body>',`<script>(function(){function lockTeacher(){var t=document.getElementById('diagTeacher');if(!t)return;var b=t.previousElementSibling;if(b)b.textContent='도연&인혜T의 한마디';t.readOnly=true;t.placeholder='관리자만 작성할 수 있습니다.';t.title='관리자만 작성할 수 있습니다.'}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',lockTeacher);else lockTeacher();})();</script></body>`);
+    }
+    res.type('html').send(html);
+  }catch(e){
+    console.error('student page',e);
+    res.status(500).send('학생 페이지를 불러오지 못했습니다.');
+  }
+});
+
 function superAdmin(req,res,next){
   if(!req.session.user||req.session.user.role!=='admin'||req.session.user.username!=='doyean7'){
     return res.status(403).json({error:'최고관리자 권한이 필요합니다.'});

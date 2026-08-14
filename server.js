@@ -1,5 +1,6 @@
 const express=require("express");
 const session=require("express-session");
+const PgSession=require("connect-pg-simple")(session);
 const bcrypt=require("bcryptjs");
 const {Pool}=require("pg");
 const multer=require("multer");
@@ -68,7 +69,13 @@ async function initDb(){
 
 app.use(express.json({limit:"3mb"}));
 app.use(express.urlencoded({extended:true,limit:"3mb"}));
-app.use(session({secret:process.env.SESSION_SECRET||"change-this-session-secret",resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:"lax",secure:false,maxAge:7*24*60*60*1000}}));
+app.use(session({
+  store:new PgSession({pool,tableName:"user_sessions",createTableIfMissing:true}),
+  secret:process.env.SESSION_SECRET||"change-this-session-secret",
+  resave:false,
+  saveUninitialized:false,
+  cookie:{httpOnly:true,sameSite:"lax",secure:false,maxAge:7*24*60*60*1000}
+}));
 
 function sendBrandedPage(file,res){
   let html=fs.readFileSync(path.join(ROOT,"public",file),"utf8").replaceAll("GREENSEOM","GREENSUM");
@@ -92,12 +99,12 @@ function patternOut(r){return {...r,photo:r.photo_data?photoUrl("patterns",r.id)
 
 app.get("/api/me",(req,res)=>res.json({user:req.session.user||null}));
 app.post("/api/signup",async(req,res)=>{const{username,password,name}=req.body;if(!username||!password||!name)return res.status(400).json({error:"이름, 아이디, 비밀번호를 모두 입력해주세요."});if(!/^[A-Za-z0-9_-]{3,30}$/.test(username))return res.status(400).json({error:"아이디는 영문/숫자/_/- 3~30자로 입력해주세요."});if(password.length<6)return res.status(400).json({error:"비밀번호는 6자 이상이어야 합니다."});try{await q("INSERT INTO users(username,password_hash,name,role) VALUES($1,$2,$3,'student')",[username,bcrypt.hashSync(password,12),name.trim()]);res.json({ok:true})}catch(e){res.status(409).json({error:"이미 사용 중인 아이디입니다."})}});
-app.post("/api/login",async(req,res)=>{const u=(await q("SELECT * FROM users WHERE username=$1",[req.body.username])).rows[0];if(!u||!bcrypt.compareSync(req.body.password,u.password_hash))return res.status(401).json({error:"아이디 또는 비밀번호가 맞지 않습니다."});req.session.user={id:u.id,username:u.username,name:u.name,role:u.role};res.json({user:req.session.user})});
+app.post("/api/login",async(req,res)=>{const u=(await q("SELECT * FROM users WHERE username=$1",[req.body.username])).rows[0];if(!u||!bcrypt.compareSync(req.body.password,u.password_hash))return res.status(401).json({error:"아이디 또는 비밀번호가 맞지 않습니다."});req.session.user={id:u.id,username:u.username,name:u.name,role:u.role};req.session.save(err=>{if(err)return res.status(500).json({error:"로그인 세션 저장에 실패했습니다."});res.json({user:req.session.user})})});
 app.post("/api/logout",(req,res)=>req.session.destroy(()=>res.json({ok:true})));
 
 app.get("/api/diagnoses",login,async(req,res)=>{const rows=(await q("SELECT * FROM diagnoses WHERE user_id=$1 ORDER BY date DESC,id DESC",[req.session.user.id])).rows;res.json(rows.map(diagOut))});
 app.post("/api/diagnoses",login,upload.single("photo"),async(req,res)=>{const b=req.body;const f=["problem_analysis","form_score","completion","expression","composition"].map(k=>Math.max(0,Math.min(5,+b[k]||0)));const x=await q(`INSERT INTO diagnoses(user_id,date,subject,photo_data,photo_mime,problem_analysis,form_score,completion,expression,composition,notes,improve,teacher_note) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,[req.session.user.id,b.date,b.subject||"",req.file?.buffer||null,req.file?.mimetype||null,...f,b.notes||"",b.improve||"",""]);res.json(diagOut(x.rows[0]))});
-app.put("/api/diagnoses/:id",login,upload.single("photo"),async(req,res)=>{const old=(await q("SELECT * FROM diagnoses WHERE id=$1 AND user_id=$2",[req.params.id,req.session.user.id])).rows[0];if(!old)return res.status(404).json({error:"기록을 찾을 수 없습니다."});const b=req.body;const f=["problem_analysis","form_score","completion","expression","composition"].map(k=>Math.max(0,Math.min(5,+b[k]||0)));const x=await q(`UPDATE diagnoses SET date=$1,subject=$2,photo_data=$3,photo_mime=$4,problem_analysis=$5,form_score=$6,completion=$7,expression=$8,composition=$9,notes=$10,improve=$11 WHERE id=$12 RETURNING *`,[b.date,b.subject||"",req.file?.buffer||old.photo_data,req.file?.mimetype||old.photo_mime,...f,b.notes||"",b.improve||"",old.id]);res.json(diagOut(x.rows[0]))});
+app.put("/api/diagnoses/:id",login,upload.single("photo"),async(req,res)=>{const old=(await q("SELECT * FROM diagnoses WHERE id=$1 AND user_id=$2",[req.params.id,req.session.user.id])).rows[0];if(!old)return res.status(404).json({error:"기록을 찾을 수 없습니다."});const b=req.body;const f=["problem_analysis","form_score","completion","expression","completion","composition"].filter((v,i)=>i<5).map(k=>Math.max(0,Math.min(5,+b[k]||0)));const x=await q(`UPDATE diagnoses SET date=$1,subject=$2,photo_data=$3,photo_mime=$4,problem_analysis=$5,form_score=$6,completion=$7,expression=$8,composition=$9,notes=$10,improve=$11 WHERE id=$12 RETURNING *`,[b.date,b.subject||"",req.file?.buffer||old.photo_data,req.file?.mimetype||old.photo_mime,...f,b.notes||"",b.improve||"",old.id]);res.json(diagOut(x.rows[0]))});
 app.delete("/api/diagnoses/:id",login,async(req,res)=>{const r=(await q("DELETE FROM diagnoses WHERE id=$1 AND user_id=$2 RETURNING id",[req.params.id,req.session.user.id])).rows[0];if(!r)return res.status(404).json({error:"기록을 찾을 수 없습니다."});res.json({ok:true})});
 
 app.get("/api/patterns",login,async(req,res)=>{const ps=(await q("SELECT * FROM patterns WHERE user_id=$1 ORDER BY id DESC",[req.session.user.id])).rows;const out=[];for(const p of ps){const imgs=(await q("SELECT id,photo_data FROM pattern_images WHERE pattern_id=$1 ORDER BY id",[p.id])).rows.map(x=>({...x,photo:x.photo_data?photoUrl("pattern-images",x.id):null}));out.push({...patternOut(p),images:imgs})}res.json(out)});

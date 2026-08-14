@@ -1,0 +1,43 @@
+name: Add teacher account management
+on:
+  push:
+    paths:
+      - '.github/workflows/add-teacher-accounts.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update server and admin page
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          server=Path('server.js')
+          s=server.read_text(encoding='utf-8')
+          marker='app.post("/api/logout",(req,res)=>req.session.destroy(()=>res.json({ok:true})));'
+          route='''\napp.post("/api/admin/teachers",admin,async(req,res)=>{try{const{username,password,name}=req.body;if(!username||!password||!name)return res.status(400).json({error:"선생님 이름, 아이디, 비밀번호를 모두 입력해주세요."});if(!/^[A-Za-z0-9_-]{3,30}$/.test(username))return res.status(400).json({error:"아이디는 영문/숫자/_/- 3~30자로 입력해주세요."});if(password.length<6)return res.status(400).json({error:"비밀번호는 6자 이상이어야 합니다."});await q("INSERT INTO users(username,password_hash,name,role) VALUES($1,$2,$3,'admin')",[username,bcrypt.hashSync(password,12),name.trim()]);res.status(201).json({ok:true})}catch(e){console.error("admin teacher signup",e);res.status(409).json({error:"이미 사용 중인 아이디입니다."})}});\napp.get("/api/admin/teachers",admin,async(req,res)=>{try{const rows=(await q("SELECT id,username,name,created_at FROM users WHERE role='admin' ORDER BY id",[])).rows;res.json(rows)}catch(e){console.error("admin teachers",e);res.status(500).json({error:"선생님 목록을 불러오지 못했습니다."})}});\n'''
+          if 'app.post("/api/admin/teachers"' not in s:
+              if marker not in s: raise SystemExit('server marker not found')
+              s=s.replace(marker,marker+route,1)
+              server.write_text(s,encoding='utf-8')
+
+          p=Path('public/admin.html')
+          h=p.read_text(encoding='utf-8')
+          old='<div class="card"><h1>학생 관리</h1><p>학생별 그림 자가진단과 패턴 연구노트를 확인합니다.</p><div id="students">불러오는 중...</div></div>'
+          new='''<div class="card"><h1>학생 관리</h1><p>학생별 그림 자가진단과 패턴 연구노트를 확인합니다.</p><div id="students">불러오는 중...</div></div><div class="card"><h2>👩‍🏫 선생님 계정 관리</h2><p style="color:#7b8794">각 선생님이 자신의 관리자 계정으로 로그인할 수 있습니다. 계정 생성은 관리자만 할 수 있습니다.</p><form id="teacherForm" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><input id="teacherName" class="btn" style="text-align:left" placeholder="선생님 이름" required><input id="teacherId" class="btn" style="text-align:left" placeholder="아이디 (영문/숫자/_/-)" required><input id="teacherPw" class="btn" style="text-align:left" type="password" placeholder="비밀번호 (6자 이상)" required><button class="btn primary" type="submit">선생님 계정 만들기</button></form><div id="teacherMsg" style="margin-top:10px"></div><div id="teachers" style="margin-top:15px"></div></div>'''
+          if old not in h: raise SystemExit('admin card marker not found')
+          h=h.replace(old,new,1)
+          h=h.replace('async function init(){let m=', '''async function loadTeachers(){const r=await fetch('/api/admin/teachers');const a=await r.json();document.querySelector('#teachers').innerHTML='<b>등록된 선생님</b>'+a.map(t=>'<div style="padding:9px 0;border-top:1px solid #e5e9ed">'+t.name+' · '+t.username+'</div>').join('')}\ndocument.getElementById('teacherForm').addEventListener('submit',async e=>{e.preventDefault();const msg=document.getElementById('teacherMsg');const r=await fetch('/api/admin/teachers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:teacherName.value,username:teacherId.value,password:teacherPw.value})});const j=await r.json();if(!r.ok){msg.style.color='#b42318';msg.textContent=j.error||'계정 생성에 실패했습니다.';return}msg.style.color='#18794e';msg.textContent='선생님 계정이 생성되었습니다.';e.target.reset();loadTeachers()});\nasync function init(){let m=''',1)
+          h=h.replace('init()\n</script>', 'init();loadTeachers()\n</script>',1)
+          p.write_text(h,encoding='utf-8')
+          PY
+      - name: Commit source changes and remove workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/add-teacher-accounts.yml
+          git add server.js public/admin.html .github/workflows/add-teacher-accounts.yml
+          git commit -m 'Add separate teacher admin accounts' || true
+          git push

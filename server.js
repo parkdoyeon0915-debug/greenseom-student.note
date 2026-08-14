@@ -112,7 +112,7 @@ app.get("/api/patterns",login,(req,res)=>{
  const ps=db.prepare("SELECT * FROM patterns WHERE user_id=? ORDER BY id DESC").all(req.session.user.id);
  res.json(ps.map(p=>({...p,photo:cleanPhoto(p.photo),images:db.prepare("SELECT id,photo FROM pattern_images WHERE pattern_id=? ORDER BY id").all(p.id).map(x=>({...x,photo:cleanPhoto(x.photo)}))})));
 });
-app.post("/api/patterns",login,upload.fields([{name:"photo",maxCount:1},{name:"images",maxCount:4}]),(req,res)=>{
+app.post("/api/patterns",login,upload.fields([{name:"photo",maxCount:1},{name:"images"}]),(req,res)=>{
  const b=req.body, p=req.files?.photo?.[0]?.filename||null;
  const x=db.prepare("INSERT INTO patterns(user_id,name,photo,must_keep,cautions,self_feedback) VALUES(?,?,?,?,?,?)")
  .run(req.session.user.id,b.name||"새 패턴",p,b.must_keep||"",b.cautions||"",b.self_feedback||"");
@@ -120,7 +120,7 @@ app.post("/api/patterns",login,upload.fields([{name:"photo",maxCount:1},{name:"i
  const row=db.prepare("SELECT * FROM patterns WHERE id=?").get(x.lastInsertRowid);
  res.json({...row,photo:cleanPhoto(row.photo),images:db.prepare("SELECT id,photo FROM pattern_images WHERE pattern_id=?").all(row.id).map(i=>({...i,photo:cleanPhoto(i.photo)}))});
 });
-app.put("/api/patterns/:id",login,upload.fields([{name:"photo",maxCount:1},{name:"images",maxCount:4}]),(req,res)=>{
+app.put("/api/patterns/:id",login,upload.fields([{name:"photo",maxCount:1},{name:"images"}]),(req,res)=>{
  const old=db.prepare("SELECT * FROM patterns WHERE id=? AND user_id=?").get(req.params.id,req.session.user.id);
  if(!old)return res.status(404).json({error:"패턴을 찾을 수 없습니다."});
  let p=old.photo;if(req.files?.photo?.[0]){if(p)fs.rmSync(path.join(UPLOADS,p),{force:true});p=req.files.photo[0].filename}

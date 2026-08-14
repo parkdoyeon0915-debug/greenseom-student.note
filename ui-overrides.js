@@ -22,11 +22,17 @@ const injectedStudent=`<style>
 </style><script>
 (function(){
   function esc2(s){return String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]))}
+  function teacherLabel(name,id){
+    if(String(id||'')==='doyean7')return '박도연T';
+    const n=String(name||'선생님').trim();
+    if(n==='관리자')return '선생님';
+    return /T$/.test(n)?n:n+'T';
+  }
   function replaceTeacherSection(){
     const ta=document.getElementById('diagTeacher');
     if(!ta||document.getElementById('teacherCommentsSection'))return;
     const holder=document.createElement('div');holder.id='teacherCommentsSection';
-    holder.innerHTML='<h3>선생님들의 코멘트</h3><div class="muted">관리자 코멘트를 불러오는 중...</div>';
+    holder.innerHTML='<h3>선생님들의 코멘트</h3><div class="muted">선생님 코멘트를 불러오는 중...</div>';
     const p=ta.previousElementSibling;
     if(p)p.replaceWith(holder);else ta.parentNode.insertBefore(holder,ta);
     ta.remove();
@@ -38,7 +44,7 @@ const injectedStudent=`<style>
       const r=await fetch('/api/diagnoses/'+id+'/comments',{credentials:'same-origin'});const j=await r.json();
       if(!r.ok)throw new Error(j.error||'코멘트를 불러오지 못했습니다.');
       const list=j.comments||[];
-      box.innerHTML='<h3>선생님들의 코멘트</h3>'+(list.length?list.map(c=>'<div class="teacher-comment-card"><div class="teacher-comment-name">'+esc2(c.admin_name)+'</div><div class="teacher-comment-text">'+esc2(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>');
+      box.innerHTML='<h3>선생님들의 코멘트</h3>'+(list.length?list.map(c=>'<div class="teacher-comment-card"><div class="teacher-comment-name">'+esc2(teacherLabel(c.admin_name,c.admin_id))+'</div><div class="teacher-comment-text">'+esc2(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>');
     }catch(e){box.innerHTML='<h3>선생님들의 코멘트</h3><div class="muted">코멘트를 불러오지 못했습니다.</div>'}
   }
   const baseEdit=window.editDiag;
@@ -54,7 +60,7 @@ const injectedStudent=`<style>
     try{const cr=await fetch('/api/diagnoses/'+id+'/comments',{credentials:'same-origin'});const cj=await cr.json();if(cr.ok)comments=cj.comments||[]}catch(e){}
     let m=document.getElementById('studentRecordModal');
     if(!m){m=document.createElement('div');m.id='studentRecordModal';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeRecordModal()})}
-    const commentsHtml=comments.length?comments.map(c=>'<div class="student-record-card"><h4>'+esc2(c.admin_name)+'</h4><div class="student-record-text">'+esc2(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>';
+    const commentsHtml=comments.length?comments.map(c=>'<div class="student-record-card"><h4>'+esc2(teacherLabel(c.admin_name,c.admin_id))+'</h4><div class="student-record-text">'+esc2(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>';
     m.innerHTML='<div class="student-record-box"><div class="student-record-head"><h2>'+esc2(r.date||'')+' 기록</h2><button class="btn" id="closeStudentRecord">닫기</button></div>'+(r.photo?'<img class="student-record-photo" src="'+esc2(r.photo)+'">':'')+'<div class="student-record-info"><div class="student-record-card"><h4>기본 정보</h4><div>날짜 · '+esc2(r.date||'-')+'</div><div>소재 · '+esc2(r.subject||'-')+'</div><div>총점 · <b>'+esc2(r.total||0)+' / 25</b></div></div><div class="student-record-card"><h4>느낀 점</h4><div class="student-record-text">'+esc2(r.notes||'기록 없음')+'</div></div><div class="student-record-card"><h4>앞으로 개선할 점</h4><div class="student-record-text">'+esc2(r.improve||'기록 없음')+'</div></div><div class="student-record-card"><h4>채점</h4><div>문제 분석 · '+esc2(r.problem_analysis||0)+'/5</div><div>형태 · '+esc2(r.form_score||0)+'/5</div><div>완성도 · '+esc2(r.completion||0)+'/5</div><div>표현력 · '+esc2(r.expression||0)+'/5</div><div>구성 · '+esc2(r.composition||0)+'/5</div></div></div><div style="margin-top:14px"><h3 style="margin:0 0 10px">선생님들의 코멘트</h3>'+commentsHtml+'</div><div class="student-record-actions"><button class="btn" id="editStudentRecord">기록 보기 · 수정</button></div></div>';
     m.classList.add('open');
     document.getElementById('closeStudentRecord').onclick=closeRecordModal;
@@ -87,6 +93,12 @@ const injectedAdmin=`<style>
 </style><script>
 (function(){
   function esc3(s){return String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]))}
+  function teacherLabel(name,id){
+    if(String(id||'')==='doyean7')return '박도연T';
+    const n=String(name||'선생님').trim();
+    if(n==='관리자')return '선생님';
+    return /T$/.test(n)?n:n+'T';
+  }
   let me=null;
   async function getMe(){if(me)return me;try{const r=await fetch('/api/me',{credentials:'same-origin'});const j=await r.json();me=j.user||null}catch(e){me=null}return me}
   async function fillComments(area,id){
@@ -95,8 +107,8 @@ const injectedAdmin=`<style>
       const cj=await cr.json();if(!cr.ok)throw new Error(cj.error||'코멘트를 불러오지 못했습니다.');
       const comments=cj.comments||[];const current=comments.find(c=>m&&c.admin_id===m.id);
       area.innerHTML='<h4 class="teacher-comments-title">선생님들의 코멘트</h4>'+
-        (comments.length?comments.map(c=>'<div class="admin-comment-card '+(m&&c.admin_id===m.id?'current':'')+'"><div class="admin-comment-name">'+esc3(c.admin_name)+'</div><div class="admin-comment-text">'+esc3(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>')+
-        (m?'<div class="admin-comment-card current" style="margin-top:14px"><div class="admin-comment-name">'+esc3(m.name)+' · 내 코멘트</div><textarea class="admin-comment-input" id="admin_comment_'+id+'" placeholder="이 학생에게 남길 코멘트를 입력해주세요.">'+esc3(current?.comment||'')+'</textarea><div class="admin-comment-save"><button class="btn primary" onclick="saveAdminComment('+id+')">내 코멘트 저장</button></div></div>':'');
+        (comments.length?comments.map(c=>'<div class="admin-comment-card '+(m&&c.admin_id===m.id?'current':'')+'"><div class="admin-comment-name">'+esc3(teacherLabel(c.admin_name,c.admin_id))+'</div><div class="admin-comment-text">'+esc3(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>')+
+        (m?'<div class="admin-comment-card current" style="margin-top:14px"><div class="admin-comment-name">'+esc3(teacherLabel(m.name,m.id))+' · 내 코멘트</div><textarea class="admin-comment-input" id="admin_comment_'+id+'" placeholder="이 학생에게 남길 코멘트를 입력해주세요.">'+esc3(current?.comment||'')+'</textarea><div class="admin-comment-save"><button class="btn primary" onclick="saveAdminComment('+id+')">내 코멘트 저장</button></div></div>':'');
     }catch(e){area.innerHTML='<h4 class="teacher-comments-title">선생님들의 코멘트</h4><div class="muted">코멘트를 불러오지 못했습니다.</div>'}
   }
   window.saveAdminComment=async function(id){

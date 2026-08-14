@@ -1,52 +1,9 @@
 const fs=require('fs');
 const originalReadFileSync=fs.readFileSync;
-
-const style=`<style>
-@media(max-width:560px){
-  .side{
-    display:flex!important;
-    flex-wrap:nowrap!important;
-    overflow-x:auto!important;
-    overflow-y:hidden!important;
-    -webkit-overflow-scrolling:touch!important;
-    scrollbar-width:none!important;
-    padding:8px 10px!important;
-    gap:6px!important;
-    justify-content:flex-start!important;
-  }
-  .side::-webkit-scrollbar{display:none!important}
-  .side .nav{
-    flex:0 0 auto!important;
-    width:auto!important;
-    min-width:max-content!important;
-    margin:0!important;
-    padding:11px 14px!important;
-    font-size:14px!important;
-    text-align:center!important;
-    white-space:nowrap!important;
-    line-height:1.25!important;
-    border-radius:12px!important;
-  }
-  .side .nav[data-page="growth"]{display:block!important;}
-}
-</style>`;
-
-fs.readFileSync=function(file,options){
-  let content=originalReadFileSync.call(this,file,options);
-  if(typeof file==='string'&&typeof content==='string'&&file.endsWith('/public/index.html')){
-    content=content.replace('</head>',style+'</head>');
-
-    // Add the missing growth tab to the real navigation before the app script runs.
-    const patternNav='<div class="nav" data-page="patterns">🧵 패턴 연구노트</div>';
-    const growthNav='<div class="nav" data-page="growth">📈 내 성장 그래프</div>';
-    if(!content.includes('data-page="growth"')&&content.includes(patternNav)){
-      content=content.replace(patternNav,patternNav+growthNav);
-    }
-
-    // The growth page is created lazily, so make the normal nav handler create it first.
-    const oldNav='function bindNav(){document.querySelectorAll(\'.nav\').forEach(n=>n.onclick=()=>go(n.dataset.page))}function go(p){document.querySelectorAll(\'.page\').forEach(x=>x.classList.remove(\'active\'));$(p).classList.add(\'active\');document.querySelectorAll(\'.nav\').forEach(x=>x.classList.toggle(\'active\',x.dataset.page===p))}';
-    const newNav='function bindNav(){document.querySelectorAll(\'.nav\').forEach(n=>n.onclick=()=>go(n.dataset.page))}function go(p){if(p===\'growth\'&&typeof growthPage===\'function\')growthPage();const page=$(p);if(!page)return;document.querySelectorAll(\'.page\').forEach(x=>x.classList.remove(\'active\'));page.classList.add(\'active\');document.querySelectorAll(\'.nav\').forEach(x=>x.classList.toggle(\'active\',x.dataset.page===p));if(p===\'growth\'&&window.innerWidth<=560){const n=document.querySelector(\'.nav[data-page="growth"]\');if(n)n.scrollIntoView({behavior:\'smooth\',inline:\'center\',block:\'nearest\'})}}';
-    if(content.includes(oldNav))content=content.replace(oldNav,newNav);
-  }
-  return content;
-};
+const style=`<style>@media(max-width:560px){.side{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;scrollbar-width:none!important;padding:8px 10px!important;gap:6px!important;justify-content:flex-start!important}.side::-webkit-scrollbar{display:none!important}.side .nav{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;margin:0!important;padding:11px 14px!important;font-size:14px!important;text-align:center!important;white-space:nowrap!important;line-height:1.25!important;border-radius:12px!important}}</style>`;
+const script=`<script>(function(){
+function esc(s){return String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
+function addGrowth(){const side=document.querySelector('.side');if(!side||document.querySelector('[data-page="growth"]'))return;const n=document.createElement('div');n.className='nav';n.dataset.page='growth';n.textContent='📈 내 성장 그래프';side.appendChild(n);n.onclick=showGrowth}
+function showGrowth(){let p=document.getElementById('growth');if(!p){p=document.createElement('section');p.id='growth';p.className='page';document.querySelector('main.content').appendChild(p)}document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page==='growth'));const rs=(typeof diags!=='undefined'&&Array.isArray(diags)?diags:[]).slice().sort((a,b)=>new Date(a.date||0)-new Date(b.date||0)).slice(-10);const names=['문제 분석','형태','완성도','표현력','구성'];const keys=['problem_analysis','form_score','completion','expression','composition'];const avg=rs.length?(rs.reduce((s,r)=>s+Number(r.total||0),0)/rs.length).toFixed(1):'0.0';let lines=names.map((name,i)=>{const a=rs.length?rs.reduce((s,r)=>s+Number(r[keys[i]]||0),0)/rs.length:0;return '<div class="growth-stat"><span>'+esc(name)+'</span><b>'+a.toFixed(1)+'</b></div>'}).join('');let weeks={};rs.forEach(r=>{const d=new Date(r.date);if(!isNaN(d)){const k=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+Math.ceil(d.getDate()/7);(weeks[k]??=[]).push(r)}});let reports=Object.keys(weeks).reverse().slice(0,4).map(k=>{const a=weeks[k],av=(a.reduce((s,r)=>s+Number(r.total||0),0)/a.length).toFixed(1);let cs=[];a.forEach(r=>{let v=r.teacher_note;try{v=JSON.parse(v)}catch(e){v=[]}if(Array.isArray(v))v.forEach(c=>c?.comment&&cs.push(c))});return '<div class="week-report-card"><h3>'+esc(k.replace('-', '년 ').replace('-', '월 '))+'주 나의 성장</h3><div class="week-report-score">평균 점수 '+av+' / 25</div><div class="week-report-comments"><h4>선생님들의 코멘트 모음</h4>'+(cs.length?cs.map(c=>'<div class="week-report-comment">'+esc(c.admin_name||'선생님')+'<br>'+esc(c.comment)+'</div>').join(''):'<div class="week-report-empty">이번 주 코멘트가 아직 없어요.</div>')+'</div></div>'}).join('');p.innerHTML='<div class="hero"><div class="muted">MY PROGRESS</div><h1>내 성장 그래프</h1><p class="muted">최근 10회의 자가진단 기록을 기준으로 나의 변화를 확인해보세요.</p></div><div class="section"><h2>최근 '+rs.length+'회 성장 추이</h2>'+(rs.length<2?'<div class="empty">그래프를 보려면 자가진단 기록을 2회 이상 저장해주세요.</div>':'<div class="growth-summary">'+lines+'<div class="growth-stat"><span>총점 평균</span><b>'+avg+'</b></div></div>')+'</div><div class="section week-report"><h2>나의 성장 리포트</h2>'+reports+'</div>';if(window.innerWidth<=560)n.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}
+function init(){addGrowth();setTimeout(addGrowth,300);setTimeout(addGrowth,1000)}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();})();</script>`;
+fs.readFileSync=function(file,options){let content=originalReadFileSync.call(this,file,options);if(typeof file==='string'&&typeof content==='string'&&file.endsWith('/public/index.html')){content=content.replace('</head>',style+'</head>');content=content.replace('</body>',script+'</body>')}return content};

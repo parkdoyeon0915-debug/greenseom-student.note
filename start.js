@@ -11,19 +11,27 @@ source=source.replace(
   '["problem_analysis","form_score","completion","expression","composition"]'
 );
 
-// Fix the student-page script typo that commented out the closing brace of savePattern().
 const originalReadFileSync=fs.readFileSync.bind(fs);
 fs.readFileSync=function(file,encoding){
   const value=originalReadFileSync(file,encoding);
   if(typeof value==='string' && path.basename(String(file))==='index.html'){
-    let html=value.replace(
+    let html=value;
+
+    // Make sure saving a diagnosis immediately refreshes the date-by-date list.
+    // Keep the existing server reload, but also update the in-memory list with the
+    // saved record so the new card is rendered even if the refresh request is slow.
+    html=html.replace(
+      "async function saveDiag(){const fd=new FormData();fd.append('date',$('#diagDate').value);fd.append('subject',$('#diagSubject').value);const vals=scoreVals();scoreNames.forEach((_,i)=>fd.append(['problem_analysis','form_score','completion','expression','composition'][i],vals[i]));fd.append('notes',$('#diagNotes').value);fd.append('improve',$('#diagImprove').value);if($('#diagFile')?.files[0])fd.append('photo',$('#diagFile').files[0]);const url=currentDiagId?'/api/diagnoses/'+currentDiagId:'/api/diagnoses';const r=await fetch(url,{method:currentDiagId?'PUT':'POST',body:fd});const j=await r.json();if(!r.ok)return alert(j.error||'저장에 실패했습니다.');currentDiagId=j.id;await loadAll();editDiag(j.id);alert('저장되었습니다.')}",
+      "async function saveDiag(){const fd=new FormData();fd.append('date',$('#diagDate').value);fd.append('subject',$('#diagSubject').value);const vals=scoreVals();scoreNames.forEach((_,i)=>fd.append(['problem_analysis','form_score','completion','expression','composition'][i],vals[i]));fd.append('notes',$('#diagNotes').value);fd.append('improve',$('#diagImprove').value);if($('#diagFile')?.files[0])fd.append('photo',$('#diagFile').files[0]);const url=currentDiagId?'/api/diagnoses/'+currentDiagId:'/api/diagnoses';const r=await fetch(url,{method:currentDiagId?'PUT':'POST',body:fd});const j=await r.json();if(!r.ok)return alert(j.error||'저장에 실패했습니다.');currentDiagId=j.id;const idx=diags.findIndex(x=>x.id===j.id);if(idx>=0)diags[idx]=j;else diags.unshift(j);renderAll();editDiag(j.id);await loadAll();editDiag(j.id);renderAll();alert('저장되었습니다.') }"
+    );
+
+    // Fix the student-page script typo that commented out the closing brace of savePattern().
+    html=html.replace(
       "patImages.forEach(f=>fd.append('images',f));// 편집 중에는 새로 선택한 그림만 추가되고 기존 그림은 그대로 유지됩니다.let r=",
       "patImages.forEach(f=>fd.append('images',f));\n// 편집 중에는 새로 선택한 그림만 추가되고 기존 그림은 그대로 유지됩니다.\nlet r="
     );
 
     // Keep selected image files alive when the student edits an existing diagnosis/pattern.
-    // Some preview code replaces the file input element; this patch restores it with the
-    // same File object so the subsequent FormData request can still upload the new photo.
     const photoPatch=`<script>(function(){
       var kept={diagFile:null,patFile:null};
       function restore(id,parentId){

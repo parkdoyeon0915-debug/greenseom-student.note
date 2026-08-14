@@ -11,47 +11,31 @@ source=source.replace(
   '["problem_analysis","form_score","completion","expression","composition"]'
 );
 
-// Fix the student-page script typo that commented out the closing brace of savePattern().
 const originalReadFileSync=fs.readFileSync.bind(fs);
 fs.readFileSync=function(file,encoding){
   const value=originalReadFileSync(file,encoding);
   if(typeof value==='string' && path.basename(String(file))==='index.html'){
-    let html=value.replace(
-      "patImages.forEach(f=>fd.append('images',f));// 편집 중에는 새로 선택한 그림만 추가되고 기존 그림은 그대로 유지됩니다.let r=",
-      "patImages.forEach(f=>fd.append('images',f));\n// 편집 중에는 새로 선택한 그림만 추가되고 기존 그림은 그대로 유지됩니다.\nlet r="
+    let html=value;
+
+    // Keep the selected photo input alive. The original preview function replaced
+    // box.innerHTML, which removed the <input type=file> and left FormData empty.
+    html=html.replace(
+      "function filePreview(input,box,placeholder){input.onchange=()=>{const f=input.files[0];if(!f)return;const u=URL.createObjectURL(f);box.innerHTML='<img src=\"'+u+'\">'}}",
+      "function filePreview(input,box,placeholder){if(!input)return;input.onchange=()=>{const f=input.files[0];if(!f)return;const u=URL.createObjectURL(f);let img=box.querySelector('img');if(!img){img=document.createElement('img');box.appendChild(img)}img.src=u;let ph=box.querySelector('#diagPlaceholder,#patPH');if(ph)ph.style.display='none'}}"
     );
 
-    // Keep selected image files alive when the student edits an existing diagnosis/pattern.
-    // Some preview code replaces the file input element; this patch restores it with the
-    // same File object so the subsequent FormData request can still upload the new photo.
-    const photoPatch=`<script>(function(){
-      var kept={diagFile:null,patFile:null};
-      function restore(id,parentId){
-        var old=document.getElementById(id);
-        if(old)return;
-        var file=kept[id];
-        if(!file)return;
-        var parent=document.getElementById(parentId);
-        if(!parent)return;
-        var input=document.createElement('input');
-        input.type='file';input.id=id;input.accept='image/*';input.style.display='none';
-        try{var dt=new DataTransfer();dt.items.add(file);input.files=dt.files;}catch(e){}
-        parent.insertBefore(input,parent.firstChild);
-      }
-      function bind(id){
-        var el=document.getElementById(id);if(!el||el.dataset.photoPatch)return;
-        el.dataset.photoPatch='1';
-        el.addEventListener('change',function(){if(this.files&&this.files[0])kept[id]=this.files[0];});
-        if(kept[id]&&!el.files.length){try{var dt=new DataTransfer();dt.items.add(kept[id]);el.files=dt.files;}catch(e){}}
-      }
-      function tick(){
-        bind('diagFile');bind('patFile');
-        restore('diagFile','diagPhoto');restore('patFile','patPhoto');
-      }
-      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',tick);else tick();
-      new MutationObserver(tick).observe(document.documentElement,{childList:true,subtree:true});
-    })();</script>`;
-    return html.replace('</body>',photoPatch+'</body>');
+    // Keep the diagnosis/pattern replacement inputs usable after an existing
+    // record is opened. Existing records previously rendered only the old image.
+    html=html.replace(
+      "$('#diagPhoto').innerHTML=r.photo?'<img src=\"'+r.photo+'\">':'<input id=\"diagFile\" type=\"file\" accept=\"image/*\"><div id=\"diagPlaceholder\" onclick=\"$(\\'#diagFile\\').click()\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>그림 사진</b><div class=\"muted\">사진 촬영 또는 사진 보관함에서 선택</div></div>';if($('#diagFile'))filePreview($('#diagFile'),$('#diagPhoto));",
+      "$('#diagPhoto').innerHTML='<input id=\"diagFile\" type=\"file\" accept=\"image/*\"><div id=\"diagPlaceholder\" onclick=\"$(\\'#diagFile\\').click()\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>'+(r.photo?'사진 교체':'그림 사진')+'</b><div class=\"muted\">사진 촬영 또는 사진 보관함에서 선택</div></div>'+(r.photo?'<img src=\"'+r.photo+'\" style=\"max-width:100%;max-height:100%;object-fit:contain\">':'');if($('#diagFile'))filePreview($('#diagFile'),$('#diagPhoto'));"
+    );
+    html=html.replace(
+      "$('#patPhoto').innerHTML=r.photo?'<img src=\"'+r.photo+'\">':'<input id=\"patFile\" type=\"file\" accept=\"image/*\"><div id=\"patPH\" onclick=\"$(\\'#patFile\\').click()\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>패턴 사진 부착</b></div>';if($('#patFile'))filePreview($('#patFile'),$('#patPhoto));",
+      "$('#patPhoto').innerHTML='<input id=\"patFile\" type=\"file\" accept=\"image/*\"><div id=\"patPH\" onclick=\"$(\\'#patFile\\').click()\" style=\"text-align:center;cursor:pointer\"><div class=\"plus\">＋</div><b>'+(r.photo?'사진 교체':'패턴 사진 부착')+'</b></div>'+(r.photo?'<img src=\"'+r.photo+'\" style=\"max-width:100%;max-height:100%;object-fit:contain\">':'');if($('#patFile'))filePreview($('#patFile'),$('#patPhoto'));"
+    );
+
+    return html;
   }
   return value;
 };

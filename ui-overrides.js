@@ -15,7 +15,7 @@ const sharedStyle=`<style>
 </style>`;
 
 const studentScript=`<script>(function(){
-const esc=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+const esc=s=>String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]));
 const label=(n,id)=>String(id||'').toLowerCase()==='doyean7'?'도연T':((n=>(!n||n==='관리자'||n==='선생님')?'선생님':/T$/.test(n)?n:n+'T')(String(n||'').trim()));
 const parse=v=>{if(!v)return[];try{const a=JSON.parse(v);return Array.isArray(a)?a.filter(x=>x&&x.comment):[]}catch(e){return v?[{id:'legacy',admin_id:'legacy',admin_name:'선생님',comment:String(v),created_at:new Date(0).toISOString()}]:[]}};
 let records=[],notices=[],uid='guest';
@@ -31,7 +31,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();</script>`;
 
 const adminScript=`<script>(function(){
-const esc=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+const esc=s=>String(s??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]));
 const label=(n,id)=>String(id||'').toLowerCase()==='doyean7'?'도연T':((n=>(!n||n==='관리자'||n==='선생님')?'선생님':/T$/.test(n)?n:n+'T')(String(n||'').trim()));
 const parse=v=>{if(!v)return[];try{const a=JSON.parse(v);return Array.isArray(a)?a.filter(x=>x&&x.comment):[]}catch(e){return v?[{id:'legacy',admin_id:'legacy',admin_name:'선생님',comment:String(v),created_at:new Date(0).toISOString()}]:[]}};
 async function me(){return (await (await fetch('/api/me',{credentials:'same-origin'})).json()).user||null}
@@ -42,4 +42,4 @@ window.openRecord=async function(kind,id){try{const [r,u]=await Promise.all([rec
 window.closeRecord=()=>document.getElementById('recordModal')&&(document.getElementById('recordModal').style.display='none');
 })();</script>`;
 
-fs.readFileSync=function(file,options){let content=originalReadFileSync.call(this,file,options);if(typeof file==='string'&&typeof content==='string'){if(file.endsWith('/public/index.html')){content=content.replace('</style>',' #diagTeacher{min-height:380px!important;}@media(max-width:560px){#diagTeacher{min-height:360px!important;}}\\n</style>');content=content.replace('</body>',sharedStyle+studentScript+'</body>')}if(file.endsWith('/public/admin.html'))content=content.replace('</body>',sharedStyle+adminScript+'</body>')}return content};
+fs.readFileSync=function(file,options){let content=originalReadFileSync.call(this,file,options);if(typeof file==='string'&&typeof content==='string'){if(file.endsWith('/public/index.html')){content=content.replace('</style>',' #diagTeacher{min-height:380px!important;}@media(max-width:560px){#diagTeacher{min-height:360px!important;}}\\n</style>');content=content.replace(/<p><b>도연&인혜T의 한마디<\\/b><\\/p>/g,'');content=content.replace('</body>',sharedStyle+studentScript+'</body>')}if(file.endsWith('/public/admin.html'))content=content.replace('</body>',sharedStyle+adminScript+'</body>')}return content};

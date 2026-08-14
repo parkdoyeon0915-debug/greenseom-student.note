@@ -2,7 +2,7 @@
   "name": "greensum-student-portal",
   "version": "3.0.0",
   "private": true,
-  "scripts": {"start":"node start.js"},
+  "scripts": {"start":"node -e \"require('./admin-comment-fix.js'); require('./start.js')\""},
   "dependencies": {
     "bcryptjs":"^2.4.3",
     "connect-pg-simple":"^10.0.0",

@@ -5,3 +5,4 @@ require('./mobile-growth-nav-fix.js');
 require('./growth-graph.js');
 require('./superadmin.js');
 require('./admin-comment-fix.js');
+require('./admin-comment-final.js');

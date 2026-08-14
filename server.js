@@ -1,4 +1,3 @@
-
 const express=require("express");
 const session=require("express-session");
 const bcrypt=require("bcryptjs");
@@ -49,6 +48,15 @@ app.use(session({
  cookie:{httpOnly:true,sameSite:"lax",secure:false,maxAge:7*24*60*60*1000}
 }));
 app.use("/uploads",express.static(UPLOADS));
+
+// 화면에 표시되는 영문 브랜드만 GREENSUM으로 통일한다. 저장된 데이터와 URL은 건드리지 않는다.
+function sendBrandedPage(file,res){
+ const html=fs.readFileSync(path.join(ROOT,"public",file),"utf8").replaceAll("GREENSEOM","GREENSUM");
+ res.type("html").send(html);
+}
+app.get("/",(req,res)=>sendBrandedPage("index.html",res));
+app.get("/index.html",(req,res)=>sendBrandedPage("index.html",res));
+app.get("/admin.html",(req,res)=>sendBrandedPage("admin.html",res));
 app.use(express.static(path.join(ROOT,"public")));
 
 const storage=multer.diskStorage({

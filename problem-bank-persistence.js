@@ -54,9 +54,6 @@ function install(app){
   });
 }
 
-// server.js creates the Express app and starts listening during its async DB init.
-// Install the persistence routes immediately before the actual listen call so the
-// existing server, session middleware, and all current routes remain untouched.
 const originalListen=express.application.listen;
 express.application.listen=function(...args){
   const app=this;
@@ -67,8 +64,6 @@ express.application.listen=function(...args){
   });
 };
 
-// The standalone problem-bank page already saves locally. Add a server-backed
-// sync layer without changing that page's existing UI or rendering code.
 const originalSend=express.response.send;
 express.response.send=function(body){
   if(typeof body==='string'&&this.req&&this.req.path==='/problem-bank.html'&&body.includes('</body>')){
@@ -96,7 +91,7 @@ express.response.send=function(body){
         if(syncing)return;
         syncing=true;
         try{
-          const r=await fetch('/api/problem-bank',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({schools:window.selected,status:window.status})});
+          const r=await fetch('/api/problem-bank',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({schools:selected,status:status})});
           if(!r.ok)throw Error('저장 실패');
           setSaveState('✓ 문제은행 저장됨',true);
         }catch(e){
@@ -106,17 +101,17 @@ express.response.send=function(body){
       async function loadServer(){
         try{
           const data=await getServer();
-          if(Array.isArray(data.schools))window.selected=data.schools;
-          window.status=data.status&&typeof data.status==='object'?data.status:{};
-          localStorage.setItem(localKey,JSON.stringify({selected:window.selected,status:window.status,photos:window.photos||[]}));
-          window.renderSelectors();window.renderTables();window.renderPhotoSelectors();window.renderGallery();
+          if(Array.isArray(data.schools))selected=data.schools;
+          status=data.status&&typeof data.status==='object'?data.status:{};
+          localStorage.setItem(localKey,JSON.stringify({selected:selected,status:status,photos:photos||[]}));
+          renderSelectors();renderTables();renderPhotoSelectors();renderGallery();
           setSaveState(data.updated_at?'✓ 저장된 진행상황 불러옴':'새 문제은행 · 자동 저장',true);
         }catch(e){
           setSaveState('오프라인 저장 모드',false);
         }
       }
-      const oldSave=window.save;
-      window.save=function(){
+      const oldSave=save;
+      save=function(){
         oldSave();
         clearTimeout(timer);
         timer=setTimeout(syncServer,120);

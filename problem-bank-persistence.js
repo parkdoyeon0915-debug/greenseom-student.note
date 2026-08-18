@@ -1,0 +1,132 @@
+const express=require('express');
+const {Pool}=require('pg');
+
+const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},max:2,idleTimeoutMillis:30000});
+let installed=false;
+let tableReady=null;
+
+async function ensureTable(){
+  if(!tableReady){
+    tableReady=pool.query(`CREATE TABLE IF NOT EXISTS problem_bank_progress(
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      schools JSONB NOT NULL DEFAULT '[]'::jsonb,
+      status JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );`);
+  }
+  return tableReady;
+}
+
+function install(app){
+  if(installed)return;
+  installed=true;
+
+  app.get('/api/problem-bank',async(req,res)=>{
+    try{
+      if(!req.session.user)return res.status(401).json({error:'로그인이 필요합니다.'});
+      await ensureTable();
+      const row=(await pool.query('SELECT schools,status,updated_at FROM problem_bank_progress WHERE user_id=$1',[req.session.user.id])).rows[0];
+      res.json({schools:row?.schools||['','',''],status:row?.status||{},updated_at:row?.updated_at||null});
+    }catch(e){
+      console.error('problem bank GET',e);
+      res.status(500).json({error:'문제은행 저장 내용을 불러오지 못했습니다.'});
+    }
+  });
+
+  app.put('/api/problem-bank',async(req,res)=>{
+    try{
+      if(!req.session.user)return res.status(401).json({error:'로그인이 필요합니다.'});
+      await ensureTable();
+      const schools=Array.isArray(req.body?.schools)?req.body.schools.slice(0,3).map(v=>typeof v==='string'?v:''):['','',''];
+      while(schools.length<3)schools.push('');
+      const rawStatus=req.body?.status&&typeof req.body.status==='object'&&!Array.isArray(req.body.status)?req.body.status:{};
+      const status={};
+      Object.entries(rawStatus).forEach(([k,v])=>{if(typeof k==='string'&&typeof v==='string'&&k.length<300&&v.length<50)status[k]=v});
+      const row=(await pool.query(`INSERT INTO problem_bank_progress(user_id,schools,status,updated_at)
+        VALUES($1,$2::jsonb,$3::jsonb,NOW())
+        ON CONFLICT(user_id) DO UPDATE SET schools=EXCLUDED.schools,status=EXCLUDED.status,updated_at=NOW()
+        RETURNING schools,status,updated_at`,[req.session.user.id,JSON.stringify(schools),JSON.stringify(status)])).rows[0];
+      res.json({ok:true,...row});
+    }catch(e){
+      console.error('problem bank PUT',e);
+      res.status(500).json({error:'문제은행 진행상황 저장에 실패했습니다.'});
+    }
+  });
+}
+
+// server.js creates the Express app and starts listening during its async DB init.
+// Install the persistence routes immediately before the actual listen call so the
+// existing server, session middleware, and all current routes remain untouched.
+const originalListen=express.application.listen;
+express.application.listen=function(...args){
+  const app=this;
+  install(app);
+  ensureTable().then(()=>originalListen.apply(app,args)).catch(err=>{
+    console.error('problem bank table init',err);
+    process.exit(1);
+  });
+};
+
+// The standalone problem-bank page already saves locally. Add a server-backed
+// sync layer without changing that page's existing UI or rendering code.
+const originalSend=express.response.send;
+express.response.send=function(body){
+  if(typeof body==='string'&&this.req&&this.req.path==='/problem-bank.html'&&body.includes('</body>')){
+    const script=`<script>(function(){
+      const localKey='greensum_problem_bank_guest';
+      let syncing=false;
+      let timer=null;
+      function setSaveState(text,ok){
+        let el=document.getElementById('problemBankSaveState');
+        if(!el){
+          el=document.createElement('div');
+          el.id='problemBankSaveState';
+          el.style='position:fixed;right:14px;bottom:14px;z-index:9999;padding:9px 12px;border-radius:10px;background:#fff;border:1px solid #dce2e8;box-shadow:0 8px 24px #00000012;font-size:12px;font-weight:800;color:#7d8791';
+          document.body.appendChild(el);
+        }
+        el.textContent=text;
+        el.style.color=ok?'#26734d':'#7d8791';
+      }
+      async function getServer(){
+        const r=await fetch('/api/problem-bank',{credentials:'same-origin',cache:'no-store'});
+        if(!r.ok)throw Error('문제은행 저장 내용을 불러오지 못했습니다.');
+        return r.json();
+      }
+      async function syncServer(){
+        if(syncing)return;
+        syncing=true;
+        try{
+          const r=await fetch('/api/problem-bank',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({schools:window.selected,status:window.status})});
+          if(!r.ok)throw Error('저장 실패');
+          setSaveState('✓ 문제은행 저장됨',true);
+        }catch(e){
+          setSaveState('저장 대기 · 다시 시도해주세요',false);
+        }finally{syncing=false;}
+      }
+      async function loadServer(){
+        try{
+          const data=await getServer();
+          if(Array.isArray(data.schools))window.selected=data.schools;
+          window.status=data.status&&typeof data.status==='object'?data.status:{};
+          localStorage.setItem(localKey,JSON.stringify({selected:window.selected,status:window.status,photos:window.photos||[]}));
+          window.renderSelectors();window.renderTables();window.renderPhotoSelectors();window.renderGallery();
+          setSaveState(data.updated_at?'✓ 저장된 진행상황 불러옴':'새 문제은행 · 자동 저장',true);
+        }catch(e){
+          setSaveState('오프라인 저장 모드',false);
+        }
+      }
+      const oldSave=window.save;
+      window.save=function(){
+        oldSave();
+        clearTimeout(timer);
+        timer=setTimeout(syncServer,120);
+        setSaveState('저장 중…',false);
+      };
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadServer);else loadServer();
+    })();</script>`;
+    body=body.replace('</body>',script+'</body>');
+  }
+  return originalSend.call(this,body);
+};
+
+console.log('GREENSUM problem bank persistence loaded');

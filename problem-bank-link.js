@@ -1,28 +1,36 @@
 const fs=require('fs');
 const originalReadFileSync=fs.readFileSync;
 
-// Problem-bank navigation fix:
-// Keep the student page's existing navigation system, but let the problem-bank
-// item use its normal href instead of being handled by go() as a SPA page.
+// Problem-bank navigation fix.
+// The student page uses a SPA-style onclick handler for .nav items. The
+// problem-bank page is a real separate URL, so intercept this item at the
+// document capture phase before the SPA handler can call go('problemBank').
 fs.readFileSync=function(file,options){
   let html=originalReadFileSync.call(this,file,options);
   const isIndex=String(file).endsWith('/public/index.html')||String(file).endsWith('public\\index.html');
   if(!isIndex||typeof html!=='string')return html;
 
-  // Remove every previously injected problem-bank navigation item.
+  // Remove older injected copies. server.js adds the final visible item.
   html=html
     .replace(/<a[^>]*data-page=["']problemBank["'][^>]*>[\\s\\S]*?<\\/a>/gi,'')
     .replace(/<div[^>]*data-page=["']problemBank["'][^>]*>[\\s\\S]*?<\\/div>/gi,'')
     .replace(/<a[^>]*id=["']problemBankNav["'][^>]*>[\\s\\S]*?<\\/a>/gi,'')
     .replace(/<[^>]*class=["'][^"']*problem-bank-link[^"']*["'][^>]*>[\\s\\S]*?<\\/[^>]+>/gi,'');
 
-  // The original bindNav() treats every .nav as an in-page SPA button.
-  // Exclude problemBank so the real <a href="/problem-bank.html"> link can
-  // perform normal browser navigation without calling go('problemBank').
-  html=html.replace(
-    /function bindNav\(\)\{document\.querySelectorAll\('\.nav'\)\.forEach\(n=>n\.onclick=\(\)=>go\(n\.dataset\.page\)\)\}/,
-    "function bindNav(){document.querySelectorAll('.nav').forEach(n=>{if(n.dataset.page==='problemBank')return;n.onclick=()=>go(n.dataset.page)})}"
-  );
+  const script=`<script>(function(){
+    function installProblemBankGuard(){
+      if(document.documentElement.dataset.problemBankGuard==='1')return;
+      document.documentElement.dataset.problemBankGuard='1';
+      document.addEventListener('click',function(e){
+        const nav=e.target.closest && e.target.closest('#problemBankNav,.problem-bank-link,[data-page="problemBank"]');
+        if(!nav)return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        window.location.assign('/problem-bank.html');
+      },true);
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installProblemBankGuard);else installProblemBankGuard();
+  })();</script>`;
 
-  return html;
+  return html.replace('</body>',script+'</body>');
 };

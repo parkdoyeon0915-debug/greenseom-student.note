@@ -101,11 +101,23 @@ express.response.send=function(body){
       async function loadServer(){
         try{
           const data=await getServer();
-          if(Array.isArray(data.schools))selected=data.schools;
-          status=data.status&&typeof data.status==='object'?data.status:{};
+          let hasServer=!!data.updated_at;
+          if(hasServer){
+            if(Array.isArray(data.schools))selected=data.schools;
+            status=data.status&&typeof data.status==='object'?data.status:{};
+          }else{
+            let local=null;
+            try{local=JSON.parse(localStorage.getItem(localKey)||'null')}catch(e){}
+            if(local&&Array.isArray(local.selected)&&(local.selected.some(Boolean)||Object.keys(local.status||{}).length)){
+              selected=local.selected;
+              status=local.status&&typeof local.status==='object'?local.status:{};
+              await syncServer();
+              hasServer=true;
+            }
+          }
           localStorage.setItem(localKey,JSON.stringify({selected:selected,status:status,photos:photos||[]}));
           renderSelectors();renderTables();renderPhotoSelectors();renderGallery();
-          setSaveState(data.updated_at?'✓ 저장된 진행상황 불러옴':'새 문제은행 · 자동 저장',true);
+          setSaveState(hasServer?'✓ 저장된 진행상황 불러옴':'새 문제은행 · 자동 저장',true);
         }catch(e){
           setSaveState('오프라인 저장 모드',false);
         }

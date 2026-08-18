@@ -1,21 +1,21 @@
 const fs=require('fs');
 const originalReadFileSync=fs.readFileSync;
 
-// Integrate the standalone problem-bank UI into the logged-in student SPA.
-// This only changes the student index HTML; existing diagnosis/pattern logic stays intact.
+// Add the problem-bank page without replacing the student's existing SPA navigation.
+// In particular, do not wrap window.go: diagnosis and pattern navigation must keep
+// using the original student-page handler unchanged.
 fs.readFileSync=function(file,options){
   let html=originalReadFileSync.call(this,file,options);
   const isIndex=String(file).endsWith('/public/index.html')||String(file).endsWith('public\\index.html');
   if(!isIndex||typeof html!=='string')return html;
 
-  // Remove any older problem-bank menu injected by previous fixes.
   html=html
     .replace(/<a[^>]*data-page=["']problemBank["'][^>]*>[\\s\\S]*?<\\/a>/gi,'')
     .replace(/<div[^>]*data-page=["']problemBank["'][^>]*>[\\s\\S]*?<\\/div>/gi,'')
     .replace(/<a[^>]*id=["']problemBankNav["'][^>]*>[\\s\\S]*?<\\/a>/gi,'')
     .replace(/<[^>]*class=["'][^"']*problem-bank-link[^"']*["'][^>]*>[\\s\\S]*?<\\/[^>]+>/gi,'');
 
-  const nav='<div class="nav" data-page="problemBank">📚 문제은행</div>';
+  const nav='<button type="button" class="nav" data-page="problemBank">📚 문제은행</button>';
   html=html.replace('</aside>',nav+'</aside>');
 
   const css=`<style id="problem-bank-integrated-style">
@@ -37,9 +37,21 @@ function initProblemBank(){
  update();
  function update(){const picked=selects.map(s=>s.value).filter(Boolean);next.classList.toggle('ready',picked.length>0);next.textContent=picked.length?'선택한 학교: '+picked.join(' · '):'학교를 선택하면 다음 단계가 준비됩니다.';localStorage.setItem('greensum_problem_bank_schools',JSON.stringify(selects.map(s=>s.value)))}
 }
-const originalGo=window.go;
-window.go=function(p){if(p==='problemBank'){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));const target=document.getElementById('problemBank');if(target)target.classList.add('active');document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page==='problemBank'));initProblemBank();return}return originalGo.apply(this,arguments)};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initProblemBank);else initProblemBank();
+function bindProblemBankNav(){
+ const nav=document.querySelector('.nav[data-page="problemBank"]');
+ if(!nav||nav.dataset.bound==='1')return;
+ nav.dataset.bound='1';
+ nav.addEventListener('click',function(e){
+   e.preventDefault();
+   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+   document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x===nav));
+   const target=document.getElementById('problemBank');
+   if(target)target.classList.add('active');
+   initProblemBank();
+ });
+}
+function boot(){bindProblemBankNav();initProblemBank()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();</script>`;
   return html.replace('</body>',script+'</body>');
 };

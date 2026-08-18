@@ -8,6 +8,7 @@ fs.readFileSync=function(file,options){
   const text=Buffer.isBuffer(html)?html.toString('utf8'):String(html);
   const cleaned=text.replace(/<div[^>]*class=["'][^"']*\\bnav\\b[^"']*["'][^>]*>\\s*📚\\s*문제은행\\s*<\\/div>/g,'');
   const injected=cleaned.replace('</aside>',`<div class="nav" id="problemBankNav">📚 문제은행</div></aside>`);
+  const navStyle=`<style>@media(max-width:900px){.side{align-items:center;padding:10px 12px;gap:6px}.side .nav{white-space:nowrap;flex:0 0 auto;margin:0;padding:10px 12px}}</style>`;
   const script=`<script>(function(){
     function cleanupAndBind(){
       document.querySelectorAll('.nav').forEach(function(n){
@@ -27,6 +28,6 @@ fs.readFileSync=function(file,options){
     setTimeout(cleanupAndBind,100);
     setTimeout(cleanupAndBind,500);
   })();</script>`;
-  const result=injected.replace('</body>',script+'</body>');
+  const result=injected.replace('</head>',navStyle+'</head>').replace('</body>',script+'</body>');
   return Buffer.isBuffer(html)?Buffer.from(result):result;
 };

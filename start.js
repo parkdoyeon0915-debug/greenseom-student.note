@@ -1,5 +1,6 @@
 require('./response-safety.js');
 require('./problem-bank-persistence.js');
+require('./problem-bank-admin-route-fix.js');
 require('./superadmin.js');
 require('./stable-core-fix.js');
 require('./student-login-stability.js');
@@ -60,7 +61,8 @@ async function openProgress(row,btn){
     if(r.status===404){render(panel,null);return;}
     if(!r.ok)throw Error((p&&p.error)||('HTTP '+r.status));
     render(panel,p);
-  }catch(e){console.warn('admin problem bank final',e);panel.innerHTML='<div class="muted">문제은행 진도를 불러오지 못했습니다.</div>';}
+  }catch(e){console.warn('admin problem bank final',e);panel.innerHTML='<div class="muted">문제은행 진도를 불러오지 못했습니다.</div>';
+  }
 }
 function bind(){
   document.querySelectorAll('#students .student').forEach(row=>{

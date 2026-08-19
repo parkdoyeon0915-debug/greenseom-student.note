@@ -36,6 +36,10 @@ function cleanStatus(value){
 async function getStudent(id){
   return (await pool.query(`SELECT id,name,username FROM users WHERE id=$1 AND role='student'`,[id])).rows[0];
 }
+async function saveForUser(userId,schools,status){
+  const row=(await pool.query(`INSERT INTO problem_bank_progress(user_id,schools,status,updated_at) VALUES($1,$2::jsonb,$3::jsonb,NOW()) ON CONFLICT(user_id) DO UPDATE SET schools=EXCLUDED.schools,status=EXCLUDED.status,updated_at=NOW() RETURNING schools,status,updated_at`,[userId,JSON.stringify(cleanSchools(schools)),JSON.stringify(cleanStatus(status))])).rows[0];
+  return row;
+}
 
 function install(app){
   if(installed)return;
@@ -84,13 +88,36 @@ function install(app){
     }
   });
 
+  // IMPORTANT: admin-target pages are opened with /problem-bank.html?id=STUDENT_ID.
+  // Their browser session is the admin session, so the normal PUT /api/problem-bank
+  // would otherwise save into the admin's own user_id. This route explicitly targets
+  // the student ID from the URL and is the only write path used by admin-target pages.
+  app.put('/api/admin/problem-bank/:id',async(req,res)=>{
+    try{
+      if(!req.session.user||req.session.user.role!=='admin')return res.status(403).json({error:'관리자 권한이 필요합니다.',code:'PB_ADMIN_PUT_AUTH'});
+      await ensureTable();
+      const id=Number(req.params.id);
+      if(!Number.isInteger(id)||id<=0)return res.status(400).json({error:'학생 번호가 올바르지 않습니다.',code:'PB_ADMIN_PUT_ID'});
+      const student=await getStudent(id);
+      if(!student)return res.status(404).json({error:'학생을 찾을 수 없습니다.',code:'PB_ADMIN_PUT_NOT_FOUND'});
+      const schools=cleanSchools(req.body?.schools);
+      const status=cleanStatus(req.body?.status);
+      const row=await saveForUser(id,schools,status);
+      res.set('Cache-Control','no-store');
+      return res.json({ok:true,id:student.id,name:student.name,username:student.username,schools:cleanSchools(row.schools),status:cleanStatus(row.status),updated_at:row.updated_at});
+    }catch(e){
+      console.error('admin problem bank PUT',e);
+      return res.status(500).json({error:'학생별 문제은행 진행상황 저장에 실패했습니다.',code:'PB_ADMIN_PUT_500',detail:String(e?.message||e).slice(0,240)});
+    }
+  });
+
   app.put('/api/problem-bank',async(req,res)=>{
     try{
       if(!req.session.user)return res.status(401).json({error:'로그인이 필요합니다.'});
       await ensureTable();
       const schools=cleanSchools(req.body?.schools);
       const status=cleanStatus(req.body?.status);
-      const row=(await pool.query(`INSERT INTO problem_bank_progress(user_id,schools,status,updated_at) VALUES($1,$2::jsonb,$3::jsonb,NOW()) ON CONFLICT(user_id) DO UPDATE SET schools=EXCLUDED.schools,status=EXCLUDED.status,updated_at=NOW() RETURNING schools,status,updated_at`,[req.session.user.id,JSON.stringify(schools),JSON.stringify(status)])).rows[0];
+      const row=await saveForUser(req.session.user.id,schools,status);
       res.set('Cache-Control','no-store');
       res.json({ok:true,id:req.session.user.id,name:req.session.user.name,username:req.session.user.username,schools:cleanSchools(row.schools),status:cleanStatus(row.status),updated_at:row.updated_at});
     }catch(e){
@@ -113,7 +140,7 @@ express.application.listen=function(...args){
 const originalSend=express.response.send;
 express.response.send=function(body){
   if(typeof body==='string'&&this.req&&this.req.path==='/problem-bank.html'&&body.includes('</body>')){
-    const script=`<script id="problem-bank-server-sync-v6">(function(){
+    const script=`<script id="problem-bank-server-sync-v7">(function(){
 let syncing=false,timer=null;
 const SCHOOL_KEY='greensum_problem_bank_schools';
 const STATUS_PREFIX='greensum_problem_bank_status_';
@@ -124,10 +151,10 @@ const apiBase=isAdminTarget?('/api/admin/problem-bank/'+encodeURIComponent(targe
 function state(t,ok){let e=document.getElementById('problemBankSaveState');if(!e){e=document.createElement('div');e.id='problemBankSaveState';e.style='position:fixed;right:14px;bottom:14px;z-index:9999;padding:9px 12px;border-radius:10px;background:#fff;border:1px solid #dce2e8;box-shadow:0 8px 24px #00000012;font-size:12px;font-weight:800';document.body.appendChild(e)}e.textContent=t;e.style.color=ok?'#26734d':'#7d8791';}
 function schools(){try{const v=JSON.parse(localStorage.getItem(SCHOOL_KEY)||'[]');return Array.isArray(v)&&v.length===3?v:['','',''];}catch(e){return ['','',''];}}
 function statuses(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith(STATUS_PREFIX))continue;const v=localStorage.getItem(k)||'';if(v&&v!=='미진행')out[k.slice(STATUS_PREFIX.length)]=v;}document.querySelectorAll('.status[data-school][data-prompt]').forEach(el=>{const k=el.dataset.school+'::'+el.dataset.prompt;const v=el.value||'미진행';if(v&&v!=='미진행')out[k]=v;});return out;}
-async function sync(){if(syncing)return;syncing=true;try{const payload={schools:schools(),status:statuses()};const method='PUT';const r=await fetch(apiBase,{method,credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.error||'save');}state('✓ 문제은행 저장됨',true);return await r.json();}catch(e){console.warn('problem bank sync',e);state('저장 대기 · 다시 시도해주세요',false);return null;}finally{syncing=false;}}
+async function sync(){if(syncing)return;syncing=true;try{const payload={schools:schools(),status:statuses()};const r=await fetch(apiBase,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.error||'save');}state('✓ 학생별 문제은행 저장됨',true);return await r.json();}catch(e){console.warn('problem bank sync',e);state('저장 실패 · 다시 시도해주세요',false);return null;}finally{syncing=false;}}
 function schedule(){clearTimeout(timer);timer=setTimeout(sync,150);state('저장 중…',false);}
 function bind(){document.querySelectorAll('.status').forEach(e=>{if(e.dataset.serverBound)return;e.dataset.serverBound='1';e.addEventListener('change',()=>{localStorage.setItem(STATUS_PREFIX+e.dataset.school+'::'+e.dataset.prompt,e.value);schedule();});});if(typeof window.saveSchools==='function'&&!window.saveSchools.__serverBound){const old=window.saveSchools;const wrapped=function(){const r=old.apply(this,arguments);schedule();return r};wrapped.__serverBound=true;window.saveSchools=wrapped;}}
-async function loadServer(){try{const r=await fetch(apiBase,{credentials:'same-origin',cache:'no-store'});if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.error||'load');}const d=await r.json();localStorage.setItem(SCHOOL_KEY,JSON.stringify(Array.isArray(d.schools)?d.schools:['','','']));for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(STATUS_PREFIX))localStorage.removeItem(k);}Object.keys(d.status||{}).forEach(k=>localStorage.setItem(STATUS_PREFIX+k,d.status[k]));if(isAdminTarget){document.title=(d.name||'학생')+' · 문제은행 · 그린섬';const brand=document.querySelector('.brand');if(brand)brand.innerHTML='<b>G</b> '+String(d.name||'학생')+' · 문제은행';}if(typeof window.load==='function')window.load();if(typeof window.render==='function')window.render();if(typeof window.renderGallery==='function')window.renderGallery();bind();state(d.updated_at?'✓ 저장된 진행상황 불러옴':'✓ 문제은행 자동 저장 준비',true);}catch(e){console.warn('problem bank load',e);bind();state('문제은행 연결 실패',false);}}
+async function loadServer(){try{const r=await fetch(apiBase,{credentials:'same-origin',cache:'no-store'});if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.error||'load');}const d=await r.json();localStorage.setItem(SCHOOL_KEY,JSON.stringify(Array.isArray(d.schools)?d.schools:['','','']));for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(STATUS_PREFIX))localStorage.removeItem(k);}Object.keys(d.status||{}).forEach(k=>localStorage.setItem(STATUS_PREFIX+k,d.status[k]));if(isAdminTarget){document.title=(d.name||'학생')+' · 문제은행 · 그린섬';const brand=document.querySelector('.brand');if(brand)brand.innerHTML='<b>G</b> '+String(d.name||'학생')+' · 문제은행';}if(typeof window.load==='function')window.load();if(typeof window.render==='function')window.render();if(typeof window.renderGallery==='function')window.renderGallery();bind();state(d.updated_at?'✓ 학생별 저장내용 불러옴':'✓ 학생별 문제은행 자동 저장 준비',true);}catch(e){console.warn('problem bank load',e);bind();state('문제은행 연결 실패',false);}}
 function boot(){setTimeout(loadServer,80);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 new MutationObserver(bind).observe(document.body,{childList:true,subtree:true});
@@ -136,4 +163,4 @@ new MutationObserver(bind).observe(document.body,{childList:true,subtree:true});
   }
   return originalSend.call(this,body);
 };
-console.log('GREENSUM problem bank persistence v6 loaded');
+console.log('GREENSUM problem bank persistence v7 loaded');

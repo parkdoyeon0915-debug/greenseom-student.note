@@ -24,9 +24,6 @@ if(!originalStatic.__greensumProblemBankServerAuthoritativeFinalV2){
       const nativeRemove=Storage.prototype.removeItem;
       function isProblemKey(k){return k===SCHOOL_KEY||k===PHOTO_KEY||String(k||'').startsWith(STATUS_PREFIX)}
       function scopedKey(k){return isProblemKey(k)?String(k)+SUFFIX:String(k)}
-      // The old page always reads fixed localStorage keys. Scope those keys
-      // before its load/render code executes so different students cannot share
-      // browser state even when they use the same computer/browser.
       Storage.prototype.getItem=function(k){return nativeGet.call(this,scopedKey(k));};
       Storage.prototype.setItem=function(k,v){return nativeSet.call(this,scopedKey(k),v);};
       Storage.prototype.removeItem=function(k){return nativeRemove.call(this,scopedKey(k));};
@@ -48,7 +45,6 @@ if(!originalStatic.__greensumProblemBankServerAuthoritativeFinalV2){
         return out;
       }
       function applyServer(d,initial){
-        // These writes are automatically redirected to this student's scoped keys.
         localStorage.setItem(SCHOOL_KEY,JSON.stringify(Array.isArray(d.schools)?d.schools:['','','']));
         const keys=[];
         for(let i=0;i<localStorage.length;i++){
@@ -138,3 +134,7 @@ if(!originalStatic.__greensumProblemBankServerAuthoritativeFinalV2){
   express.static=wrappedStatic;
 }
 console.log('GREENSUM problem bank server authoritative final v2 loaded');
+
+// This is intentionally required LAST in the problem-bank layer stack.
+// It injects a final client-side guard after all earlier static/response wrappers.
+require('./problem-bank-hard-isolation.js');

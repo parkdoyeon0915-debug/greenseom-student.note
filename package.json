@@ -2,10 +2,10 @@
   "name": "greensum-student-portal",
   "version": "3.0.0",
   "private": true,
-  "scripts": {"start":"node -e \"require('./problem-bank-force-ui.js'); require('./student-save-final-fix.js'); require('./start.js'); require('./problem-bank-auth-refresh.js')\""},
+  "scripts": {"start":"node -e \"require('./problem-bank-force-ui.js'); require('./student-save-final-fix.js'); require('./start.js'); require('./problem-bank-auth-refresh.js'); require('./problem-bank-student-save-final.js')\""},
   "dependencies": {
     "bcryptjs":"^2.4.3",
-    "connect-pg-simple":"^10.0.0",
+    "connect-pg-simple":"^10.0.3",
     "express":"^4.21.2",
     "express-session":"^1.18.1",
     "multer":"^1.4.5-lts.1",

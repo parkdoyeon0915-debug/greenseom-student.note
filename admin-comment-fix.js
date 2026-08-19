@@ -9,55 +9,15 @@ const parseLegacy=v=>{if(!v)return[];try{const a=JSON.parse(v);return Array.isAr
 const teacherLabel=c=>{const id=String(c?.admin_id||c?.admin_username||'').toLowerCase();if(id==='doyean7')return'도연T';let n=String(c?.admin_name||'선생님').trim();if(!n||n==='관리자'||n==='선생님')return'선생님';return /T$/.test(n)?n:n+'T'};
 const commentBox=c=>'<div class="admin-comment-entry"><div class="admin-comment-author">'+esc(teacherLabel(c))+'</div><div class="admin-comment-text">'+esc(c.comment)+'</div><div class="admin-comment-date">'+esc(c.created_at?new Date(c.created_at).toLocaleString('ko-KR'):'')+'</div></div>';
 async function me(){const r=await fetch('/api/me',{credentials:'same-origin',cache:'no-store'});const j=await r.json();return j.user||null}
-async function get(id){const r=await fetch('/api/admin/diagnoses/'+id,{credentials:'same-origin',cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'기록을 불러오지 못했습니다.');return j}
-async function getComments(id){const r=await fetch('/api/admin/diagnoses/'+id+'/teacher-comments',{credentials:'same-origin',cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'선생님 코멘트를 불러오지 못했습니다.');return Array.isArray(j.comments)?j.comments:[]}
-async function saveComment(id,text){const r=await fetch('/api/admin/diagnoses/'+id+'/teacher-comments',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({comment:text})});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||'코멘트 저장에 실패했습니다.');return j}
-async function fixCounts(){
-  const rows=[...document.querySelectorAll('#students .student')];
-  await Promise.all(rows.map(async row=>{
-    const id=Number(row.dataset.studentId);
-    const small=row.querySelector('small');
-    if(!id||!small)return;
-    try{
-      const r=await fetch('/api/admin/students/'+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store'});
-      const x=await r.json();
-      if(!r.ok)throw Error(x.error||'student detail failed');
-      const diagnoses=Array.isArray(x.diagnoses)?x.diagnoses.length:0;
-      const patterns=Array.isArray(x.patterns)?x.patterns.length:0;
-      const dates=Array.isArray(x.diagnoses)?x.diagnoses.map(v=>v.date).filter(Boolean).sort():[];
-      const last=dates.length?dates[dates.length-1]:'-';
-      small.textContent='자가진단 '+diagnoses+'개 · 패턴 '+patterns+'개 · 최근 '+last;
-    }catch(e){
-      console.warn('admin count final fix',id,e);
-      small.textContent='자가진단 0개 · 패턴 0개 · 최근 -';
-    }
-  }));
-}
-async function patchTeacher(sec,id){if(sec.dataset.commentFix==='1')return;sec.dataset.commentFix='1';try{const[u,comments]=await Promise.all([me(),getComments(id)]);sec.innerHTML='<h4 style="margin:0 0 12px">선생님들의 코멘트 <span class="muted">· 관리자 전용</span></h4><div class="admin-comment-list">'+(comments.length?comments.map(commentBox).join(''):'<div class="admin-comment-empty">아직 등록된 선생님 코멘트가 없습니다.</div>')+'</div><div class="admin-comment-new"><div class="admin-comment-author">새 코멘트 · '+esc(teacherLabel({admin_id:u?.username||u?.id,admin_name:u?.name}))+'</div><textarea class="admin-comment-input" placeholder="이 학생에게 남길 코멘트를 입력해주세요."></textarea><div class="actions"><button class="btn primary admin-comment-save">새 코멘트 등록</button></div></div>';sec.querySelector('.admin-comment-save').onclick=async()=>{const text=sec.querySelector('.admin-comment-input').value.trim();if(!text)return alert('코멘트를 입력해주세요.');try{await saveComment(id,text);sec.dataset.commentFix='';await patchTeacher(sec,id);alert('코멘트가 저장되었습니다.')}catch(e){console.error('teacher comment save',e);alert(e.message||'코멘트 저장에 실패했습니다.')}}}catch(e){console.error('admin comment fix',e);sec.dataset.commentFix='';const msg=document.createElement('div');msg.className='admin-comment-empty';msg.textContent='선생님 코멘트를 불러오지 못했습니다. '+(e.message||'');sec.innerHTML=msg}}
-async function kickStudentFixed(id,name){
-  if(!confirm(name+' 학생을 강퇴할까요?\n\n강퇴하면 해당 계정의 로그인이 차단됩니다. 기존 기록은 보존됩니다.'))return;
-  try{
-    const r=await fetch('/api/admin/students/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin',cache:'no-store'});
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok)throw Error(j.error||'강퇴에 실패했습니다.');
-    const row=document.querySelector('#students .student[data-student-id="'+Number(id)+'"]');
-    if(row)row.remove();
-    document.querySelector('#detail').innerHTML='<div class="muted">학생을 선택해주세요.</div>';
-    alert(name+' 학생을 강퇴했습니다.\n\n해당 계정의 로그인은 차단되고 기존 기록은 보존됩니다.');
-  }catch(e){
-    console.error('admin kick student',e);
-    alert(e.message||'강퇴에 실패했습니다.');
-  }
-}
-function patchAll(){document.querySelectorAll('.teacher').forEach(sec=>{const ta=sec.querySelector('textarea[id^="teacher_"]');if(ta)patchTeacher(sec,Number(ta.id.replace('teacher_','')))});document.querySelectorAll('.photo img,.patternHero img,.patternImgs img').forEach(img=>{if(img.dataset.photoFix)return;img.dataset.photoFix='1';img.addEventListener('error',()=>{img.style.display='none';const p=img.parentElement;if(p&&!p.querySelector('.photo-error')){const d=document.createElement('span');d.className='photo-error muted';d.textContent='사진을 불러오지 못했습니다.';p.appendChild(d)}})})}
-function boot(){
-  window.kickStudent=kickStudentFixed;
-  fixCounts();patchAll();
-  const d=document.getElementById('detail');
-  const s=document.getElementById('students');
-  if(d&&!d.dataset.commentObserver){d.dataset.commentObserver='1';new MutationObserver(()=>patchAll()).observe(d,{childList:true,subtree:true})}
-  if(s&&!s.dataset.countObserver){s.dataset.countObserver='1';new MutationObserver(()=>fixCounts()).observe(s,{childList:true,subtree:true})}
-}
+async function getComments(id){const r=await fetch('/api/admin/diagnoses/'+encodeURIComponent(id)+'/teacher-comments',{credentials:'same-origin',cache:'no-store'});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||'선생님 코멘트를 불러오지 못했습니다.');return Array.isArray(j.comments)?j.comments:[]}
+async function saveComment(id,text){const r=await fetch('/api/admin/diagnoses/'+encodeURIComponent(id)+'/teacher-comments',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({comment:text})});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||'코멘트 저장에 실패했습니다.');return j}
+async function fixCounts(){const rows=[...document.querySelectorAll('#students .student')];await Promise.all(rows.map(async row=>{const id=Number(row.dataset.studentId);const small=row.querySelector('small');if(!id||!small)return;try{const r=await fetch('/api/admin/students/'+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store'});const x=await r.json();if(!r.ok)throw Error(x.error||'student detail failed');const diagnoses=Array.isArray(x.diagnoses)?x.diagnoses.length:0;const patterns=Array.isArray(x.patterns)?x.patterns.length:0;const dates=Array.isArray(x.diagnoses)?x.diagnoses.map(v=>v.date).filter(Boolean).sort():[];small.textContent='자가진단 '+diagnoses+'개 · 패턴 '+patterns+'개 · 최근 '+(dates.length?dates[dates.length-1]:'-')}catch(e){console.warn('admin count final fix',id,e);small.textContent='자가진단 0개 · 패턴 0개 · 최근 -'}}))}
+async function patchTeacherSection(sec,id){if(sec.dataset.commentFix==='1')return;sec.dataset.commentFix='1';try{const[u,comments]=await Promise.all([me(),getComments(id)]);sec.innerHTML='<h4 style="margin:0 0 12px">선생님들의 코멘트 <span class="muted">· 관리자 전용</span></h4><div class="admin-comment-list">'+(comments.length?comments.map(commentBox).join(''):'<div class="admin-comment-empty">아직 등록된 선생님 코멘트가 없습니다.</div>')+'</div><div class="admin-comment-new"><div class="admin-comment-author">새 코멘트 · '+esc(teacherLabel({admin_id:u?.username||u?.id,admin_name:u?.name}))+'</div><textarea class="admin-comment-input" placeholder="이 학생에게 남길 코멘트를 입력해주세요."></textarea><div class="actions"><button class="btn primary admin-comment-save">새 코멘트 등록</button></div></div>';sec.querySelector('.admin-comment-save').onclick=async()=>{const text=sec.querySelector('.admin-comment-input').value.trim();if(!text)return alert('코멘트를 입력해주세요.');try{await saveComment(id,text);sec.dataset.commentFix='';await patchTeacherSection(sec,id);alert('코멘트가 저장되었습니다.')}catch(e){console.error('teacher comment save',e);alert(e.message||'코멘트 저장에 실패했습니다.')}}}catch(e){console.error('admin comment fix',e);sec.dataset.commentFix='';sec.innerHTML='<div class="admin-comment-empty">선생님 코멘트를 불러오지 못했습니다. '+esc(e.message||'')+'</div>'}}
+async function patchCurrentModal(){const ta=document.getElementById('adminTeacherNote');const id=Number(window.__greensumCurrentDiagnosisId||0);if(!ta||!id||ta.dataset.commentUi==='1')return;ta.dataset.commentUi='1';const box=ta.closest('.detail-box');if(!box)return;const legacy=parseLegacy(ta.value);let comments=[];try{comments=await getComments(id)}catch(e){console.warn('teacher-comments endpoint',e)}const merged=[...comments];const seen=new Set(comments.map(c=>String(c.id||'')));legacy.forEach(c=>{const key=String(c.id||c.created_at||c.comment);if(!seen.has(key)){merged.push(c);seen.add(key)}});const u=await me().catch(()=>null);box.innerHTML='<h4>선생님들의 코멘트 <small style="font-weight:normal;color:#7d8791">관리자 전용</small></h4><div class="admin-comment-list">'+(merged.length?merged.map(commentBox).join(''):'<div class="admin-comment-empty">아직 등록된 선생님 코멘트가 없습니다.</div>')+'</div><div class="admin-comment-new"><div class="admin-comment-author">새 코멘트 · '+esc(teacherLabel({admin_id:u?.username||u?.id,admin_name:u?.name}))+'</div><textarea class="admin-comment-input" placeholder="이 학생에게 남길 코멘트를 입력해주세요."></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn primary admin-comment-save">새 코멘트 등록</button></div></div>';box.querySelector('.admin-comment-save').onclick=async()=>{const input=box.querySelector('.admin-comment-input');const text=input.value.trim();if(!text)return alert('코멘트를 입력해주세요.');try{await saveComment(id,text);input.value='';box.dataset.commentRefresh='1';ta.dataset.commentUi='';await patchCurrentModal();alert('코멘트가 저장되었습니다.')}catch(e){console.error('teacher comment save',e);alert(e.message||'코멘트 저장에 실패했습니다.')}}}
+function captureDiagnosis(e){const el=e.target&&e.target.closest?e.target.closest('[data-diagnosis-id]'):null;if(el)window.__greensumCurrentDiagnosisId=Number(el.dataset.diagnosisId||0)}
+function patchAll(){document.querySelectorAll('.teacher').forEach(sec=>{const ta=sec.querySelector('textarea[id^="teacher_"]');if(ta)patchTeacherSection(sec,Number(ta.id.replace('teacher_','')))});document.querySelectorAll('.photo img,.patternHero img,.patternImgs img').forEach(img=>{if(img.dataset.photoFix)return;img.dataset.photoFix='1';img.addEventListener('error',()=>{img.style.display='none';const p=img.parentElement;if(p&&!p.querySelector('.photo-error')){const d=document.createElement('span');d.className='photo-error muted';d.textContent='사진을 불러오지 못했습니다.';p.appendChild(d)}})})}
+async function kickStudentFixed(id,name){if(!confirm(name+' 학생을 강퇴할까요?\\n\\n강퇴하면 해당 계정의 로그인이 차단됩니다. 기존 기록은 보존됩니다.'))return;try{const r=await fetch('/api/admin/students/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin',cache:'no-store'});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||'강퇴에 실패했습니다.');const row=document.querySelector('#students .student[data-student-id="'+Number(id)+'"]');if(row)row.remove();document.querySelector('#detail').innerHTML='<div class="muted">학생을 선택해주세요.</div>';alert(name+' 학생을 강퇴했습니다.\\n\\n해당 계정의 로그인은 차단되고 기존 기록은 보존됩니다.')}catch(e){console.error('admin kick student',e);alert(e.message||'강퇴에 실패했습니다.')}}
+function boot(){window.kickStudent=kickStudentFixed;fixCounts();patchAll();document.addEventListener('click',captureDiagnosis,true);const body=document.getElementById('recordModalBody');if(body&&!body.dataset.commentObserver){body.dataset.commentObserver='1';new MutationObserver(()=>setTimeout(patchCurrentModal,0)).observe(body,{childList:true,subtree:true})}const d=document.getElementById('detail');if(d&&!d.dataset.commentObserver){d.dataset.commentObserver='1';new MutationObserver(()=>{patchAll();setTimeout(patchCurrentModal,0)}).observe(d,{childList:true,subtree:true})}const s=document.getElementById('students');if(s&&!s.dataset.countObserver){s.dataset.countObserver='1';new MutationObserver(()=>fixCounts()).observe(s,{childList:true,subtree:true)});setTimeout(patchCurrentModal,100);setTimeout(patchCurrentModal,500);setTimeout(patchCurrentModal,1200)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();</script>`;
 express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');return originalSend.call(this,body)};

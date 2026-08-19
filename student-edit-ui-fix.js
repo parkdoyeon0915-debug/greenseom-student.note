@@ -6,6 +6,19 @@ const patch=`<style id="student-edit-ui-style">
 .record-actions{display:flex;gap:7px;margin-top:10px;align-items:center}.record-actions .btn{padding:7px 11px;font-size:12px}.record-actions .delete{color:#b42318;border-color:#efb5af}.student-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid #e5e9ed}.student-modal-actions .delete{color:#b42318;border-color:#efb5af}.teacher-readonly{background:#f6f8fa!important;color:#6d7680!important;cursor:not-allowed}
 </style><script id="student-edit-ui-script">
 (function(){
+function editDiagFromModal(id,modal){
+  if(!id)return;
+  if(modal)modal.style.display='none';
+  // 먼저 자가진단 페이지로 이동한 뒤 기존 편집 함수를 실행합니다.
+  // 이렇게 하면 상세 모달을 만든 별도 클릭 이벤트와 충돌하지 않습니다.
+  setTimeout(function(){
+    if(typeof go==='function')go('diagnosis');
+    setTimeout(function(){
+      if(typeof loadDiag==='function')loadDiag(id);
+      if(typeof window.scrollTo==='function')window.scrollTo({top:0,behavior:'smooth'});
+    },30);
+  },0);
+}
 function addDiagActions(){
   const list=document.getElementById('diagList');
   if(!list)return;
@@ -20,7 +33,7 @@ function addDiagActions(){
     if(!id)return;
     const box=document.createElement('div');box.className='record-actions';
     const edit=document.createElement('button');edit.type='button';edit.className='btn';edit.textContent='수정';
-    edit.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();if(typeof loadDiag==='function')loadDiag(id);if(typeof go==='function')go('diagnosis');});
+    edit.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();editDiagFromModal(id,null);});
     const del=document.createElement('button');del.type='button';del.className='btn delete';del.textContent='삭제';
     del.addEventListener('click',function(e){studentDeleteDiag(e,id);});
     box.append(edit,del);card.appendChild(box);
@@ -35,7 +48,7 @@ function addModalActions(){
   if(!id)return;
   host.dataset.ready='1';host.className='student-modal-actions';
   const edit=document.createElement('button');edit.type='button';edit.className='btn';edit.textContent='수정';
-  edit.onclick=function(e){e.preventDefault();e.stopPropagation();if(typeof loadDiag==='function')loadDiag(id);modal.style.display='none';if(typeof go==='function')go('diagnosis');};
+  edit.onclick=function(e){e.preventDefault();e.stopPropagation();editDiagFromModal(id,modal);};
   const del=document.createElement('button');del.type='button';del.className='btn delete';del.textContent='삭제';
   del.onclick=function(e){studentDeleteDiag(e,id);};
   host.append(edit,del);

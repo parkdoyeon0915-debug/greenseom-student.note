@@ -134,81 +134,92 @@ express.application.listen=function(...args){
 };
 
 // Client state is isolated by the student id in the URL (admin target page)
-// or by the authenticated student id. Server save/load is explicit and never
-// calls the page's renderer until the scoped local state has been replaced.
+// or by the authenticated student id. Server save/load is explicit and scoped.
 const originalSend=express.response.send;
 express.response.send=function(body){
   if(typeof body==='string'&&this.req&&this.req.path==='/problem-bank.html'&&body.includes('</body>')){
-    const script=`<script id="problem-bank-per-student-sync">(function(){
+    const script=`<style id="problem-bank-server-ui-style">
+#problemBankServerControls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding:14px 0 0;border-top:1px solid #e4e8ec}
+#problemBankServerControls .pb-cloud{font-size:18px;line-height:1}
+#problemBankServerControls .pb-label{font-size:13px;font-weight:900;color:#26313b;margin-right:auto}
+#problemBankServerControls .pb-sub{font-size:11px;font-weight:600;color:#8a939c;display:block;margin-top:2px}
+#problemBankServerControls .pb-state{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:7px 10px;border-radius:9px;background:#f5f7fa;color:#7d8791;font-size:12px;font-weight:800}
+#problemBankServerControls .pb-state.ok{background:#edf8f1;color:#26734d}
+#problemBankServerControls .pb-state.warn{background:#fff7e8;color:#9a6a16}
+#problemBankServerControls .pb-state.err{background:#fff0f0;color:#a33b3b}
+#problemBankServerControls .pb-btn{min-height:40px}
+@media(max-width:700px){#problemBankServerControls{align-items:stretch}.pb-label{width:100%;margin-right:0!important}.pb-state{order:4;width:100%;justify-content:center}.pb-btn{flex:1}}
+</style><script id="problem-bank-per-student-sync">(function(){
 const params=new URLSearchParams(location.search);
 const urlId=Number(params.get('id')||0);
 const adminTarget=Number.isInteger(urlId)&&urlId>0;
-let targetId=adminTarget?urlId:0;
 let api=adminTarget?('/api/admin/problem-bank/'+encodeURIComponent(urlId)):'/api/problem-bank';
 const SCHOOL_KEY='greensum_problem_bank_schools';
 const STATUS_PREFIX='greensum_problem_bank_status_';
 const PHOTO_KEY='greensum_problem_bank_photos';
-const nativeGet=Storage.prototype.getItem;
 const nativeSet=Storage.prototype.setItem;
 const nativeRemove=Storage.prototype.removeItem;
 const suffixBase='__student_';
-let scopedSuffix=suffixBase+(adminTarget?urlId:'session');
+const scopedSuffix=suffixBase+(adminTarget?urlId:'session');
 const scopedKey=k=>String(k||'')+scopedSuffix;
 function isPB(k){return k===SCHOOL_KEY||k===PHOTO_KEY||String(k||'').startsWith(STATUS_PREFIX)}
+const nativeGet=Storage.prototype.getItem;
 Storage.prototype.getItem=function(k){return isPB(k)?nativeGet.call(this,scopedKey(k)):nativeGet.call(this,k)};
 Storage.prototype.setItem=function(k,v){return isPB(k)?nativeSet.call(this,scopedKey(k),v):nativeSet.call(this,k,v)};
 Storage.prototype.removeItem=function(k){return isPB(k)?nativeRemove.call(this,scopedKey(k)):nativeRemove.call(this,k)};
-function notify(text,ok){let e=document.getElementById('problemBankServerState');if(!e){e=document.createElement('span');e.id='problemBankServerState';e.style='font-size:12px;font-weight:800;margin-left:auto;align-self:center';const bar=document.getElementById('problemBankServerControls');if(bar)bar.appendChild(e)}e.textContent=text;e.style.color=ok?'#26734d':'#7d8791';}
+let dirty=false,lastSaved=null;
+function ui(){return document.getElementById('problemBankServerControls')}
+function state(text,type){const e=document.getElementById('pbServerState');if(!e)return;e.className='pb-state '+(type||'');e.textContent=text}
+function markDirty(){dirty=true;state('● 변경사항이 아직 서버에 저장되지 않았어요.','warn')}
 function schoolsFromDom(){const out=['','',''];document.querySelectorAll('#selects select[data-slot]').forEach(el=>{const i=Number(el.dataset.slot);if(i>=0&&i<3)out[i]=el.value||''});return out}
 function statusFromDom(){const out={};document.querySelectorAll('.status[data-school][data-prompt]').forEach(el=>{const v=el.value||'미진행';if(v&&v!=='미진행')out[String(el.dataset.school)+'::'+String(el.dataset.prompt)]=v});return out}
 function setServerData(d){
   nativeSet.call(localStorage,scopedKey(SCHOOL_KEY),JSON.stringify(Array.isArray(d.schools)?d.schools:['','','']));
-  const remove=[];
-  const n=localStorage.length;
-  for(let i=0;i<n;i++){const k=localStorage.key(i);if(k&&k.startsWith(STATUS_PREFIX)&&k.endsWith(scopedSuffix))remove.push(k)}
-  remove.forEach(k=>nativeRemove.call(localStorage,k));
+  const remove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(STATUS_PREFIX)&&k.endsWith(scopedSuffix))remove.push(k)}remove.forEach(k=>nativeRemove.call(localStorage,k));
   Object.entries(d.status||{}).forEach(([k,v])=>nativeSet.call(localStorage,scopedKey(STATUS_PREFIX+k),v));
   if(typeof window.load==='function')window.load();
   if(typeof window.render==='function')window.render();
   if(typeof window.renderGallery==='function')window.renderGallery();
 }
 async function serverLoad(){
-  notify('서버 내용 불러오는 중…',false);
+  state('서버 데이터를 불러오는 중…','');
   try{
-    const r=await fetch(api,{credentials:'same-origin',cache:'no-store'});
-    const d=await r.json().catch(()=>({}));
+    const r=await fetch(api,{credentials:'same-origin',cache:'no-store'});const d=await r.json().catch(()=>({}));
     if(!r.ok)throw Error(d.error||('HTTP '+r.status));
-    if(!adminTarget&&d.id)targetId=Number(d.id)||0;
-    setServerData(d);
-    if(d.name){document.title=String(d.name)+' · 문제은행 · 그린섬';const b=document.querySelector('.brand');if(b)b.innerHTML='<b>G</b> '+String(d.name||'학생')+' · 문제은행';}
-    notify('✓ 서버 내용 불러옴',true);
-  }catch(e){console.warn('problem bank server load',e);notify('서버 불러오기 실패',false)}
+    setServerData(d);lastSaved=d.updated_at||null;dirty=false;
+    if(d.name){document.title=String(d.name)+' · 문제은행 · 그린섬';const b=document.querySelector('.brand');if(b)b.innerHTML='<b>G</b> '+String(d.name)+' · 문제은행';}
+    state(lastSaved?'✓ 서버 저장 내용 불러옴':'✓ 서버 연결됨','ok');
+    const e=document.getElementById('pbServerLastSaved');if(e)e.textContent=lastSaved?'마지막 저장 · '+new Date(lastSaved).toLocaleString('ko-KR'):'아직 서버에 저장된 기록이 없습니다.';
+  }catch(e){console.warn('problem bank server load',e);state('서버를 불러오지 못했습니다. 로그인 상태를 확인해주세요.','err')}
 }
 async function serverSave(){
-  notify('서버에 저장 중…',false);
+  const save=document.getElementById('pbServerSave');if(save)save.disabled=true;
+  state('서버에 저장하는 중…','');
   try{
-    const payload={schools:schoolsFromDom(),status:statusFromDom()};
-    const r=await fetch(api,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify(payload)});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok)throw Error(d.error||('HTTP '+r.status));
-    setServerData(d);
-    notify('✓ 이 학생 ID에 서버 저장됨',true);
-  }catch(e){console.warn('problem bank server save',e);notify('서버 저장 실패',false)}
+    const r=await fetch(api,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({schools:schoolsFromDom(),status:statusFromDom()})});
+    const d=await r.json().catch(()=>({}));if(!r.ok)throw Error((d.error||('HTTP '+r.status))+(d.code?' ['+d.code+']':''));
+    setServerData(d);lastSaved=d.updated_at||null;dirty=false;
+    state('✓ 서버에 안전하게 저장됨','ok');
+    const e=document.getElementById('pbServerLastSaved');if(e)e.textContent=lastSaved?'마지막 저장 · '+new Date(lastSaved).toLocaleString('ko-KR'):'저장 완료';
+  }catch(e){console.error('problem bank server save',e);state('저장에 실패했습니다. 다시 시도해주세요.','err')}
+  finally{if(save)save.disabled=false}
 }
-function addControls(){
-  if(document.getElementById('problemBankServerControls'))return;
-  const hero=document.querySelector('.hero');
-  if(!hero)return;
-  const bar=document.createElement('div');
-  bar.id='problemBankServerControls';
-  bar.style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid #e4e8ec';
-  const loadBtn=document.createElement('button');loadBtn.className='btn';loadBtn.textContent='☁ 서버 불러오기';loadBtn.onclick=serverLoad;
-  const saveBtn=document.createElement('button');saveBtn.className='btn primary';saveBtn.textContent='☁ 서버 저장';saveBtn.onclick=serverSave;
-  bar.appendChild(loadBtn);bar.appendChild(saveBtn);hero.appendChild(bar);
+function bindDirty(){document.querySelectorAll('#selects select[data-slot],.status[data-school][data-prompt]').forEach(el=>{if(el.dataset.pbDirtyBound==='1')return;el.dataset.pbDirtyBound='1';el.addEventListener('change',()=>setTimeout(markDirty,0));})}
+function mount(){
+  if(document.getElementById('problemBankServerControls')){bindDirty();return}
+  const hero=document.querySelector('.hero');if(!hero)return;
+  const box=document.createElement('div');box.id='problemBankServerControls';
+  const label=document.createElement('div');label.className='pb-label';label.innerHTML='☁️ 서버 저장 <span class="pb-sub">학교 선택과 문제은행 진행상황을 학생 계정에 저장합니다.</span>';
+  const load=document.createElement('button');load.type='button';load.className='btn pb-btn';load.id='pbServerLoad';load.textContent='서버에서 불러오기';load.onclick=serverLoad;
+  const save=document.createElement('button');save.type='button';save.className='btn primary pb-btn';save.id='pbServerSave';save.textContent='서버에 저장';save.onclick=serverSave;
+  const st=document.createElement('span');st.id='pbServerState';st.className='pb-state';st.textContent='서버 저장 준비';
+  const last=document.createElement('span');last.id='pbServerLastSaved';last.className='pb-sub';last.textContent='아직 저장 내용을 불러오지 않았습니다.';last.style='width:100%;margin-top:-3px';
+  box.append(label,load,save,st,last);hero.appendChild(box);bindDirty();
 }
-function boot(){addControls();setTimeout(serverLoad,80)}
+function boot(){mount();setTimeout(serverLoad,120)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
-new MutationObserver(addControls).observe(document.documentElement,{childList:true,subtree:true});
+new MutationObserver(()=>{mount();}).observe(document.documentElement,{childList:true,subtree:true});
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='저장하지 않은 문제은행 변경사항이 있습니다.';}});
 })();</script>`;
     body=body.replace('</body>',script+'</body>');
   }

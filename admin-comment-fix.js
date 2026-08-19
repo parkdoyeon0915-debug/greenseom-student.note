@@ -15,3 +15,15 @@ window.diagView=diagViewFixed;window.saveTeacherComment=saveTeacherComment;
 })();
 </script>`;
 express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</body>',patch+'</body>');return originalSend.call(this,body)};
+
+// 서버의 기존 자가진단 수정 라우트가 completion 값을 중복해서
+// PostgreSQL에 14개 파라미터를 전달하는 경우를 안전하게 보정합니다.
+// 기존 UI/라우트/데이터는 건드리지 않고 해당 UPDATE 쿼리의 중복 값 하나만 제거합니다.
+const pg=require('pg');
+const originalPoolQuery=pg.Pool.prototype.query;
+pg.Pool.prototype.query=function(text,values,callback){
+  if(typeof text==='string' && /^UPDATE diagnoses SET date=/i.test(text) && Array.isArray(values) && values.length===14){
+    values=values.slice(0,8).concat(values.slice(9));
+  }
+  return originalPoolQuery.call(this,text,values,callback);
+};

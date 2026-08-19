@@ -1,5 +1,5 @@
-// 학생 페이지: 기존 수정/삭제 기능을 목록에서 바로 사용할 수 있게 보강합니다.
-// 관리자 페이지에는 적용하지 않습니다. 학생 데이터/DB 구조도 변경하지 않습니다.
+// 학생 페이지: 기록 목록에서 수정/삭제 버튼을 바로 사용할 수 있게 보강합니다.
+// 관리자 페이지에는 적용하지 않습니다.
 const express=require('express');
 const originalSend=express.response.send;
 const patch=`<style id="student-edit-ui-style">
@@ -7,10 +7,16 @@ const patch=`<style id="student-edit-ui-style">
 </style><script id="student-edit-ui-script">
 (function(){
 function esc(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
-function cardDiagFixed(x){return '<div class="record"><div onclick="loadDiag('+Number(x.id)+');go(\"diagnosis\")" style="cursor:pointer"><div class="thumb">'+(x.photo?'<img src="'+esc(x.photo)+'">':'사진 없음')+'</div><b>'+esc(x.date)+'</b><div class="muted">'+esc(x.subject||'오늘의 그림')+' · '+Number(x.total||0)+'/25점</div></div><div class="record-actions"><button class="btn" type="button" onclick="loadDiag('+Number(x.id)+');go(\"diagnosis\")">수정</button><button class="btn delete" type="button" onclick="studentDeleteDiag(event,'+Number(x.id)+')">삭제</button></div></div>'}
-function cardPatternFixed(x){return '<div class="record"><div onclick="loadPattern('+Number(x.id)+');go(\"patterns\")" style="cursor:pointer"><div class="thumb">'+(x.photo?'<img src="'+esc(x.photo)+'">':'패턴 사진 없음')+'</div><b>'+esc(x.name)+'</b><div class="muted">'+(Array.isArray(x.images)?x.images.length:0)+'개의 적용 그림</div></div><div class="record-actions"><button class="btn" type="button" onclick="loadPattern('+Number(x.id)+');go(\"patterns\")">수정</button><button class="btn delete" type="button" onclick="studentDeletePattern(event,'+Number(x.id)+')">삭제</button></div></div>'}
-async function studentDeleteDiag(ev,id){ev?.stopPropagation();if(!confirm('이 자가진단 기록을 삭제할까요?'))return;const r=await fetch('/api/diagnoses/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){const j=await r.json().catch(()=>({}));return alert(j.error||'삭제에 실패했습니다.')}await loadAll();if(typeof newDiag==='function')newDiag();if(typeof go==='function')go('diagnosis')}
-async function studentDeletePattern(ev,id){ev?.stopPropagation();if(!confirm('이 패턴 연구노트를 삭제할까요?'))return;const r=await fetch('/api/patterns/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){const j=await r.json().catch(()=>({}));return alert(j.error||'삭제에 실패했습니다.')}await loadAll();if(typeof newPattern==='function')newPattern();if(typeof go==='function')go('patterns')}
+function cardDiagFixed(x){
+  const id=Number(x.id);
+  return `<div class="record"><div onclick="loadDiag(${id});go('diagnosis')" style="cursor:pointer"><div class="thumb">${x.photo?`<img src="${esc(x.photo)}">`:'사진 없음'}</div><b>${esc(x.date)}</b><div class="muted">${esc(x.subject||'오늘의 그림')} · ${Number(x.total||0)}/25점</div></div><div class="record-actions"><button class="btn" type="button" onclick="loadDiag(${id});go('diagnosis')">수정</button><button class="btn delete" type="button" onclick="studentDeleteDiag(event,${id})">삭제</button></div></div>`;
+}
+function cardPatternFixed(x){
+  const id=Number(x.id);
+  return `<div class="record"><div onclick="loadPattern(${id});go('patterns')" style="cursor:pointer"><div class="thumb">${x.photo?`<img src="${esc(x.photo)}">`:'패턴 사진 없음'}</div><b>${esc(x.name)}</b><div class="muted">${Array.isArray(x.images)?x.images.length:0}개의 적용 그림</div></div><div class="record-actions"><button class="btn" type="button" onclick="loadPattern(${id});go('patterns')">수정</button><button class="btn delete" type="button" onclick="studentDeletePattern(event,${id})">삭제</button></div></div>`;
+}
+async function studentDeleteDiag(ev,id){ev?.stopPropagation();if(!confirm('이 자가진단 기록을 삭제할까요?'))return;const r=await fetch('/api/diagnoses/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){const j=await r.json().catch(()=>({}));return alert(j.error||'삭제에 실패했습니다.')}await loadAll();newDiag();go('diagnosis')}
+async function studentDeletePattern(ev,id){ev?.stopPropagation();if(!confirm('이 패턴 연구노트를 삭제할까요?'))return;const r=await fetch('/api/patterns/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){const j=await r.json().catch(()=>({}));return alert(j.error||'삭제에 실패했습니다.')}await loadAll();newPattern();go('patterns')}
 window.cardDiag=cardDiagFixed;window.cardPattern=cardPatternFixed;window.studentDeleteDiag=studentDeleteDiag;window.studentDeletePattern=studentDeletePattern;
 function protectTeacherComment(){const el=document.getElementById('diagTeacher');if(!el)return;el.readOnly=true;el.classList.add('teacher-readonly');el.title='선생님 코멘트는 학생이 수정할 수 없습니다.';const label=el.previousElementSibling;if(label&&label.tagName==='B')label.textContent='선생님 코멘트 · 읽기 전용';}
 function boot(){protectTeacherComment();const oldLoadDiag=window.loadDiag;if(typeof oldLoadDiag==='function'&&!oldLoadDiag.__studentProtected){const wrapped=function(id){const r=oldLoadDiag(id);setTimeout(protectTeacherComment,0);return r};wrapped.__studentProtected=true;window.loadDiag=wrapped;}new MutationObserver(protectTeacherComment).observe(document.body,{childList:true,subtree:true});}

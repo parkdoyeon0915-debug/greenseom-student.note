@@ -2,55 +2,104 @@ const express=require('express');
 const fs=require('fs');
 const path=require('path');
 
-// problem-bank.html is normally served by express.static(), so response.send()
-// hooks do not reliably run. Wrap express.static itself and handle the page
-// before the static middleware gets a chance to serve it.
+// FINAL ROUTE-LEVEL FIX. This module is loaded before the other problem-bank
+// layers. It owns /problem-bank.html so later static wrappers cannot bypass it.
 const originalStatic=express.static;
-if(!originalStatic.__greensumProblemBankContextFinalFix){
-  function injectAdminContext(html){
-    const script=`<script id="problem-bank-static-context-final-fix">(function(){
-      const params=new URLSearchParams(location.search);
-      const targetId=Number(params.get('id')||0);
-      if(!Number.isInteger(targetId)||targetId<=0)return;
-      const originalFetch=window.fetch.bind(window);
-      const targetUrl='/api/admin/problem-bank/'+encodeURIComponent(targetId);
-      let active=false;
-      function rewrite(input,init){
-        const raw=typeof input==='string'?input:(input&&input.url)||'';
-        if(raw!=='/api/problem-bank'&&!raw.endsWith('/api/problem-bank'))return [input,init];
-        if(typeof input==='string')return [targetUrl,init];
-        try{return [new Request(targetUrl,input),init]}catch(e){return [targetUrl,init]}
+if(!originalStatic.__greensumProblemBankContextFinalFixV3){
+  function inject(html,mode,targetId){
+    const api=mode==='admin'
+      ? '/api/admin/problem-bank/'+encodeURIComponent(targetId)
+      : '/api/problem-bank';
+    const suffix='__pb_student_'+String(targetId);
+    const script=`<script id="problem-bank-static-context-final-fix-v3">(function(){
+      const API=${JSON.stringify(api)};
+      const SUFFIX=${JSON.stringify(suffix)};
+      const SCHOOL_KEY='greensum_problem_bank_schools';
+      const STATUS_PREFIX='greensum_problem_bank_status_';
+      const PHOTO_KEY='greensum_problem_bank_photos';
+      const nativeGet=Storage.prototype.getItem;
+      const nativeSet=Storage.prototype.setItem;
+      const nativeRemove=Storage.prototype.removeItem;
+      function isPBKey(k){return k===SCHOOL_KEY||k===PHOTO_KEY||String(k||'').startsWith(STATUS_PREFIX)}
+      function scoped(k){return isPBKey(k)?String(k)+SUFFIX:String(k)}
+      // The legacy page uses fixed localStorage names. Make those names
+      // physically different for every student before any legacy code runs.
+      Storage.prototype.getItem=function(k){return nativeGet.call(this,scoped(k));};
+      Storage.prototype.setItem=function(k,v){return nativeSet.call(this,scoped(k),v);};
+      Storage.prototype.removeItem=function(k){return nativeRemove.call(this,scoped(k));};
+
+      let ready=false,saving=false,timer=null;
+      function toast(text,ok){
+        let e=document.getElementById('pbServerState');
+        if(!e){e=document.createElement('div');e.id='pbServerState';e.style='position:fixed;right:14px;bottom:14px;z-index:99999;padding:9px 12px;border:1px solid #dce2e8;border-radius:10px;background:#fff;box-shadow:0 8px 24px #0002;font-size:12px;font-weight:800';document.body.appendChild(e)}
+        e.textContent=text;e.style.color=ok?'#26734d':'#b42318';
       }
-      window.fetch=function(input,init){
-        if(!active)return originalFetch(input,init);
-        const pair=rewrite(input,init);
-        return originalFetch(pair[0],pair[1]);
-      };
+      function schoolsFromDom(){
+        const out=['','',''];
+        document.querySelectorAll('#selects select[data-slot]').forEach(el=>{const i=Number(el.dataset.slot);if(i>=0&&i<3)out[i]=el.value||''});
+        return out;
+      }
+      function statusFromDom(){
+        const out={};
+        document.querySelectorAll('.status[data-school][data-prompt]').forEach(el=>{const v=el.value||'미진행';if(v&&v!=='미진행')out[String(el.dataset.school)+'::'+String(el.dataset.prompt)]=v});
+        return out;
+      }
+      function clearScopedStatuses(){
+        const keys=[];
+        for(let i=0;i<localStorage.length;i++){
+          const k=localStorage.key(i);
+          if(k&&k.startsWith(STATUS_PREFIX+SUFFIX))keys.push(k);
+        }
+        keys.forEach(k=>nativeRemove.call(localStorage,k));
+      }
+      function applyServer(d){
+        localStorage.setItem(SCHOOL_KEY,JSON.stringify(Array.isArray(d.schools)?d.schools:['','','']));
+        clearScopedStatuses();
+        Object.keys(d.status||{}).forEach(k=>nativeSet.call(localStorage,STATUS_PREFIX+k+SUFFIX,d.status[k]));
+        if(d.name){
+          document.title=String(d.name)+' · 문제은행 · 그린섬';
+          const b=document.querySelector('.brand');
+          if(b)b.innerHTML='<b>G</b> '+String(d.name)+' · 문제은행';
+        }
+        if(typeof window.load==='function')window.load();
+        if(typeof window.render==='function')window.render();
+        if(typeof window.renderGallery==='function')window.renderGallery();
+      }
+      async function saveServer(){
+        if(!ready||saving)return;
+        saving=true;toast('학생별 서버에 저장 중…',false);
+        try{
+          const r=await fetch(API,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({schools:schoolsFromDom(),status:statusFromDom()})});
+          const d=await r.json().catch(()=>({}));
+          if(!r.ok)throw Error(d.error||('HTTP '+r.status));
+          applyServer(d);toast('✓ 이 학생에게만 저장됨',true);
+        }catch(e){console.warn('problem bank server save v3',e);toast('저장 실패 · 다시 시도해주세요',false)}
+        finally{saving=false}
+      }
+      function scheduleSave(){clearTimeout(timer);timer=setTimeout(saveServer,180)}
+      function bind(){
+        document.querySelectorAll('#selects select[data-slot],.status[data-school][data-prompt]').forEach(el=>{
+          if(el.dataset.pbV3Bound==='1')return;
+          el.dataset.pbV3Bound='1';
+          el.addEventListener('change',scheduleSave,true);
+        });
+      }
       async function boot(){
         try{
-          const meR=await originalFetch('/api/me',{credentials:'same-origin',cache:'no-store'});
-          const me=await meR.json().catch(()=>({}));
-          if(!meR.ok||!me.user||me.user.role!=='admin')return;
-          active=true;
-          const r=await originalFetch(targetUrl,{credentials:'same-origin',cache:'no-store'});
-          const p=await r.json().catch(()=>({}));
-          if(!r.ok)throw Error(p.error||('HTTP '+r.status));
-          localStorage.setItem('greensum_problem_bank_schools',JSON.stringify(Array.isArray(p.schools)?p.schools:['','','']));
-          for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith('greensum_problem_bank_status_'))localStorage.removeItem(k);}
-          Object.keys(p.status||{}).forEach(k=>localStorage.setItem('greensum_problem_bank_status_'+k,p.status[k]));
-          const photoNamespace='greensum_problem_bank_photos_student_'+targetId;
-          const photos=localStorage.getItem(photoNamespace);
-          if(photos!==null)localStorage.setItem('greensum_problem_bank_photos',photos);
-          else localStorage.removeItem('greensum_problem_bank_photos');
-          document.title=(p.name||'학생')+' · 문제은행 · 그린섬';
-          const brand=document.querySelector('.brand');
-          if(brand)brand.innerHTML='<b>G</b> '+String(p.name||'학생')+' · 문제은행';
-          if(typeof window.load==='function')window.load();
-          if(typeof window.render==='function')window.render();
-          if(typeof window.renderGallery==='function')window.renderGallery();
-        }catch(e){console.warn('problem bank static context final fix',e);}
+          const r=await fetch(API,{credentials:'same-origin',cache:'no-store'});
+          const d=await r.json().catch(()=>({}));
+          if(!r.ok)throw Error(d.error||('HTTP '+r.status));
+          applyServer(d);
+          ready=true;bind();
+          toast('✓ 학생별 저장내용 불러옴',true);
+        }catch(e){
+          console.warn('problem bank server load v3',e);
+          ready=true;bind();
+          toast('학생별 저장내용을 불러오지 못했습니다.',false);
+        }
       }
-      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+      new MutationObserver(bind).observe(document.documentElement,{childList:true,subtree:true});
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else setTimeout(boot,0);
     })();</script>`;
     return html.includes('</body>')?html.replace('</body>',script+'</body>'):html+script;
   }
@@ -62,34 +111,27 @@ if(!originalStatic.__greensumProblemBankContextFinalFix){
         const user=req.session.user;
         const rawId=new URLSearchParams((req.url||'').split('?')[1]||'').get('id');
         const requestedId=Number(rawId||0);
-
-        // Students can only use their own problem-bank context. If they enter
-        // the page without an id, attach their logged-in DB user id.
-        if(user.role==='student'){
-          if(Number.isInteger(Number(user.id))&&Number(user.id)>0&&requestedId!==Number(user.id)){
-            return res.redirect('/problem-bank.html?id='+encodeURIComponent(Number(user.id)));
-          }
-          return middleware(req,res,next);
+        let mode=null,targetId=0;
+        if(user.role==='admin'){
+          if(Number.isInteger(requestedId)&&requestedId>0){mode='admin';targetId=requestedId;}
+        }else if(user.role==='student'){
+          mode='student';targetId=Number(user.id)||0;
+          if(targetId>0&&requestedId!==targetId){return res.redirect('/problem-bank.html?id='+encodeURIComponent(targetId));}
         }
-
-        // Admin URLs may target a specific student with ?id=123. Serve the
-        // page with a small bootstrap script that loads that student's data.
-        if(user.role==='admin'&&Number.isInteger(requestedId)&&requestedId>0){
+        if(mode&&targetId>0){
           const file=path.join(root,'problem-bank.html');
           try{
             if(fs.existsSync(file)){
-              const html=injectAdminContext(fs.readFileSync(file,'utf8'));
-              res.type('html').set('Cache-Control','no-store').send(html);
-              return;
+              const injected=inject(fs.readFileSync(file,'utf8'),mode,targetId);
+              return res.type('html').set('Cache-Control','no-store').send(injected);
             }
-          }catch(e){console.warn('problem bank admin static context',e);}
+          }catch(e){console.warn('problem bank static context v3',e)}
         }
       }
       return middleware(req,res,next);
     };
   };
-  wrappedStatic.__greensumProblemBankContextFinalFix=true;
+  wrappedStatic.__greensumProblemBankContextFinalFixV3=true;
   express.static=wrappedStatic;
 }
-
-console.log('GREENSUM problem bank static context final fix loaded');
+console.log('GREENSUM problem bank static context final fix v3 loaded');

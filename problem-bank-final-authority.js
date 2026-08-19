@@ -32,4 +32,23 @@ new MutationObserver(()=>{mount();bind()}).observe(document.documentElement,{chi
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='저장하지 않은 문제은행 변경사항이 있습니다.'}});
 })();</script>`;
 express.response.send=function(body){if(typeof body==='string'&&this.req?.path==='/problem-bank.html'&&body.includes('</body>')&&!body.includes('id="problem-bank-server-ui-script"'))body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');return prev.call(this,body)};
+
+// /problem-bank.html is currently inside express.static(). Static-file responses do not pass through res.send,
+// so intercept only this HTML asset and send it through the normal response.send pipeline above.
+const nativeStatic=express.static;
+express.static=function(root,options){
+  const staticMiddleware=nativeStatic(root,options);
+  return function(req,res,next){
+    if(req.path==='/problem-bank.html'){
+      try{
+        const fs=require('fs');
+        const path=require('path');
+        const html=fs.readFileSync(path.join(root,'problem-bank.html'),'utf8');
+        return res.type('html').send(html);
+      }catch(e){return next(e)}
+    }
+    return staticMiddleware(req,res,next);
+  };
+};
+
 console.log('GREENSUM problem bank server save UI loaded');

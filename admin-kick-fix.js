@@ -3,8 +3,8 @@ const originalSend=express.response.send;
 
 const style=`<style id="admin-kick-fix-style">
 #students .student{position:relative}
-#students .student > div:last-child{position:relative;z-index:100}
-#students .student .danger{position:relative;z-index:101;pointer-events:auto!important;cursor:pointer!important}
+#students .student > div:last-child{position:relative;z-index:10000}
+#students .student .danger{position:relative;z-index:10001;pointer-events:auto!important;cursor:pointer!important;touch-action:manipulation!important}
 </style>`;
 
 const script=`<script id="admin-kick-fix-script">(function(){
@@ -19,7 +19,7 @@ const script=`<script id="admin-kick-fix-script">(function(){
   }
 
   async function doKick(btn,id,name){
-    if(btn.dataset.kickBusy==='1')return;
+    if(!btn||btn.dataset.kickBusy==='1')return;
     if(!window.confirm(name+' 학생을 강퇴할까요?\\n\\n강퇴하면 해당 계정의 로그인이 차단됩니다. 기존 기록은 보존됩니다.'))return;
     btn.dataset.kickBusy='1';
     btn.disabled=true;
@@ -52,11 +52,25 @@ const script=`<script id="admin-kick-fix-script">(function(){
       btn.type='button';
       btn.removeAttribute('onclick');
       btn.addEventListener('click',function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
+        e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
         doKick(btn,parsed.id,parsed.name);
       },true);
+    });
+  }
+
+  // Some deployments have a transparent layer above the action area. Capture the
+  // pointer at document level and use button geometry so the kick action still
+  // works even when the visual button is not the event target.
+  function pointerFallback(e){
+    if(e.button!==undefined&&e.button!==0)return;
+    const x=e.clientX,y=e.clientY;
+    document.querySelectorAll('#students .student .danger').forEach(btn=>{
+      if(btn.dataset.kickFix!=='1')return;
+      const r=btn.getBoundingClientRect();
+      if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom){
+        e.preventDefault();e.stopPropagation();
+        doKick(btn,Number(btn.dataset.kickId),btn.dataset.kickName||'학생');
+      }
     });
   }
 
@@ -68,9 +82,10 @@ const script=`<script id="admin-kick-fix-script">(function(){
       new MutationObserver(install).observe(root,{childList:true,subtree:true});
     }
   }
+  document.addEventListener('pointerdown',pointerFallback,true);
+  document.addEventListener('mousedown',pointerFallback,true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
-  setTimeout(boot,50);
-  setTimeout(boot,300);
+  setTimeout(boot,50);setTimeout(boot,300);setTimeout(boot,1000);
 })();</script>`;
 
 express.response.send=function(body){

@@ -97,7 +97,7 @@ function install(app){
               return;
             }
             active=true;
-            const r=await originalFetch(targetUrl(),{credentials:'same-origin',cache:'no-store'});
+            const r=await originalFetch(targetUrl,{credentials:'same-origin',cache:'no-store'});
             const p=await r.json().catch(()=>({}));
             if(!r.ok)throw Error(p.error||('HTTP '+r.status));
             localStorage.setItem('greensum_problem_bank_schools',JSON.stringify(Array.isArray(p.schools)?p.schools:['','','']));
@@ -133,3 +133,4 @@ express.application.listen=function(...args){
 };
 
 console.log('GREENSUM problem bank student context fix loaded');
+require('./problem-bank-admin-id-selector.js');

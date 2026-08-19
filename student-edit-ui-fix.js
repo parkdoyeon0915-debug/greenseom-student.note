@@ -1,10 +1,6 @@
 // 학생 페이지 전용: 날짜별 자가진단 기록 수정/삭제 기능을 안정적으로 제공합니다.
 // 관리자 페이지에는 적용하지 않습니다.
 const express=require('express');
-
-// 기존 server.js의 PUT /api/diagnoses/:id에는 점수 필드가 중복되어
-// PostgreSQL에 잘못된 개수의 파라미터가 전달되는 문제가 있습니다.
-// 이 모듈이 먼저 로드되므로 해당 라우트가 등록될 때 정상 구현을 먼저 등록합니다.
 const originalPut=express.application.put;
 const multer=require('multer');
 const {Pool}=require('pg');
@@ -16,15 +12,40 @@ express.application.put=function(path,...handlers){
     const fixedHandlers=[diagnosisFixUpload.single('photo'),async(req,res)=>{
       try{
         if(!req.session.user)return res.status(401).json({error:'로그인이 필요합니다.'});
-        const old=(await diagnosisFixPool.query('SELECT * FROM diagnoses WHERE id=$1 AND user_id=$2',[req.params.id,req.session.user.id])).rows[0];
+        const id=Number(req.params.id);
+        if(!Number.isInteger(id)||id<=0)return res.status(400).json({error:'잘못된 자가진단 기록입니다.'});
+        const old=(await diagnosisFixPool.query('SELECT * FROM diagnoses WHERE id=$1 AND user_id=$2',[id,req.session.user.id])).rows[0];
         if(!old)return res.status(404).json({error:'기록을 찾을 수 없습니다.'});
         const b=req.body||{};
+        if(!b.date)return res.status(400).json({error:'날짜를 입력해주세요.'});
         const keys=['problem_analysis','form_score','completion','expression','composition'];
         const f=keys.map(k=>Math.max(0,Math.min(5,Number(b[k])||0)));
-        const x=(await diagnosisFixPool.query(`UPDATE diagnoses SET date=$1,subject=$2,photo_data=$3,photo_mime=$4,problem_analysis=$5,form_score=$6,completion=$7,expression=$8,composition=$9,notes=$10,improve=$11 WHERE id=$12 AND user_id=$13 RETURNING *`,[b.date||old.date,b.subject||'',req.file?.buffer||old.photo_data,req.file?.mimetype||old.photo_mime,...f,b.notes||'',b.improve||'',req.params.id,req.session.user.id])).rows[0];
-        const total=f.reduce((a,v)=>a+v,0);
-        res.json({...x,total,photo:x.photo_data?`/api/files/diagnoses/${x.id}`:null});
-      }catch(e){console.error('student diagnosis PUT fix',e);res.status(500).json({error:'자가진단 수정 저장에 실패했습니다.'})}
+        const values=[
+          String(b.date),
+          String(b.subject||''),
+          req.file&&req.file.buffer?req.file.buffer:old.photo_data,
+          req.file&&req.file.mimetype?req.file.mimetype:old.photo_mime,
+          f[0],f[1],f[2],f[3],f[4],
+          String(b.notes||''),
+          String(b.improve||''),
+          id,
+          req.session.user.id
+        ];
+        const sql=`UPDATE diagnoses
+          SET date=$1, subject=$2, photo_data=$3, photo_mime=$4,
+              problem_analysis=$5, form_score=$6, completion=$7,
+              expression=$8, composition=$9, notes=$10, improve=$11
+          WHERE id=$12 AND user_id=$13
+          RETURNING *`;
+        const result=await diagnosisFixPool.query(sql,values);
+        if(!result.rows[0])return res.status(404).json({error:'수정할 기록을 찾을 수 없습니다.'});
+        const x=result.rows[0];
+        const total=[x.problem_analysis,x.form_score,x.completion,x.expression,x.composition].reduce((a,v)=>a+(Number(v)||0),0);
+        return res.json({...x,total,photo:x.photo_data?`/api/files/diagnoses/${x.id}`:null});
+      }catch(e){
+        console.error('student diagnosis PUT fix',e&&e.stack||e);
+        return res.status(500).json({error:'자가진단 수정 저장에 실패했습니다: '+(e&&e.message?e.message:'알 수 없는 서버 오류')});
+      }
     }];
     return originalPutForDiagnosis.call(this,path,...fixedHandlers);
   }

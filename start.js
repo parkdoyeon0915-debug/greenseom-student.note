@@ -7,5 +7,4 @@ require('./ui-nav-fix.js');
 require('./problem-bank-link-disable.js');
 require('./admin-count-fix.js');
 require('./admin-kick-fix.js');
-require('./admin-problem-bank-fix.js');
 require('./admin-problem-bank-binding-fix.js');

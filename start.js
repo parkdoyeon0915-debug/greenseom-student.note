@@ -6,6 +6,7 @@ require('./stable-core-fix.js');
 require('./student-login-stability.js');
 require('./ui-nav-fix.js');
 require('./problem-bank-link-disable.js');
+require('./problem-bank-student-url-fix.js');
 require('./admin-count-fix.js');
 require('./admin-kick-fix.js');
 require('./admin-problem-bank-binding-fix.js');

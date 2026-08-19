@@ -133,8 +133,7 @@ express.application.listen=function(...args){
   });
 };
 
-// Client state is isolated by the student id in the URL (admin target page)
-// or by the authenticated student id. Server save/load is explicit and scoped.
+// Student pages use the authenticated session id. Admin target pages may use ?id=N.
 const originalSend=express.response.send;
 express.response.send=function(body){
   if(typeof body==='string'&&this.req&&this.req.path==='/problem-bank.html'&&body.includes('</body>')){
@@ -152,23 +151,23 @@ express.response.send=function(body){
 </style><script id="problem-bank-per-student-sync">(function(){
 const params=new URLSearchParams(location.search);
 const urlId=Number(params.get('id')||0);
-const adminTarget=Number.isInteger(urlId)&&urlId>0;
-let api=adminTarget?('/api/admin/problem-bank/'+encodeURIComponent(urlId)):'/api/problem-bank';
+let currentUserId=0;
+let currentUserRole='';
+let adminTarget=false;
+let api='/api/problem-bank';
+let scopedSuffix='__student_session';
 const SCHOOL_KEY='greensum_problem_bank_schools';
 const STATUS_PREFIX='greensum_problem_bank_status_';
 const PHOTO_KEY='greensum_problem_bank_photos';
 const nativeSet=Storage.prototype.setItem;
 const nativeRemove=Storage.prototype.removeItem;
-const suffixBase='__student_';
-const scopedSuffix=suffixBase+(adminTarget?urlId:'session');
+const nativeGet=Storage.prototype.getItem;
 const scopedKey=k=>String(k||'')+scopedSuffix;
 function isPB(k){return k===SCHOOL_KEY||k===PHOTO_KEY||String(k||'').startsWith(STATUS_PREFIX)}
-const nativeGet=Storage.prototype.getItem;
 Storage.prototype.getItem=function(k){return isPB(k)?nativeGet.call(this,scopedKey(k)):nativeGet.call(this,k)};
 Storage.prototype.setItem=function(k,v){return isPB(k)?nativeSet.call(this,scopedKey(k),v):nativeSet.call(this,k,v)};
 Storage.prototype.removeItem=function(k){return isPB(k)?nativeRemove.call(this,scopedKey(k)):nativeRemove.call(this,k)};
 let dirty=false,lastSaved=null;
-function ui(){return document.getElementById('problemBankServerControls')}
 function state(text,type){const e=document.getElementById('pbServerState');if(!e)return;e.className='pb-state '+(type||'');e.textContent=text}
 function markDirty(){dirty=true;state('● 변경사항이 아직 서버에 저장되지 않았어요.','warn')}
 function schoolsFromDom(){const out=['','',''];document.querySelectorAll('#selects select[data-slot]').forEach(el=>{const i=Number(el.dataset.slot);if(i>=0&&i<3)out[i]=el.value||''});return out}
@@ -180,6 +179,22 @@ function setServerData(d){
   if(typeof window.load==='function')window.load();
   if(typeof window.render==='function')window.render();
   if(typeof window.renderGallery==='function')window.renderGallery();
+}
+async function identifyUser(){
+  const r=await fetch('/api/me',{credentials:'same-origin',cache:'no-store'});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||!d.user)throw Error(d.error||('HTTP '+r.status));
+  currentUserId=Number(d.user.id||0);
+  currentUserRole=String(d.user.role||'');
+  if(!currentUserId)throw Error('학생 계정 ID를 확인할 수 없습니다.');
+  // Only an authenticated admin may use ?id=N to open another student's problem bank.
+  adminTarget=currentUserRole==='admin'&&Number.isInteger(urlId)&&urlId>0;
+  api=adminTarget?('/api/admin/problem-bank/'+encodeURIComponent(urlId)):'/api/problem-bank';
+  // Student pages never expose or depend on a student id in the URL.
+  if(currentUserRole==='student'&&params.has('id')){
+    history.replaceState(null,document.title,location.pathname+location.hash);
+  }
+  scopedSuffix='__student_'+currentUserId;
 }
 async function serverLoad(){
   state('서버 데이터를 불러오는 중…','');
@@ -216,7 +231,17 @@ function mount(){
   const last=document.createElement('span');last.id='pbServerLastSaved';last.className='pb-sub';last.textContent='아직 저장 내용을 불러오지 않았습니다.';last.style='width:100%;margin-top:-3px';
   box.append(label,load,save,st,last);hero.appendChild(box);bindDirty();
 }
-function boot(){mount();setTimeout(serverLoad,120)}
+async function boot(){
+  try{
+    await identifyUser();
+    mount();
+    setTimeout(serverLoad,120);
+  }catch(e){
+    console.warn('problem bank identify user',e);
+    state('로그인 정보를 확인할 수 없습니다.','err');
+    mount();
+  }
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 new MutationObserver(()=>{mount();}).observe(document.documentElement,{childList:true,subtree:true});
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='저장하지 않은 문제은행 변경사항이 있습니다.';}});

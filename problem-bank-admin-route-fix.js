@@ -13,16 +13,22 @@ async function ensureTable(){
   )`);
 }
 
+function parseJson(v,fallback){
+  if(v===null||v===undefined)return fallback;
+  if(typeof v==='object')return v;
+  try{return JSON.parse(String(v));}catch(e){return fallback;}
+}
 function cleanSchools(v){
-  const a=Array.isArray(v)?v.slice(0,3).map(x=>typeof x==='string'?x:''):[];
+  const parsed=parseJson(v,[]);
+  const a=Array.isArray(parsed)?parsed.slice(0,3).map(x=>typeof x==='string'?x:''):[];
   while(a.length<3)a.push('');
   return a;
 }
-
 function cleanStatus(v){
+  const parsed=parseJson(v,{});
   const out={};
-  if(v&&typeof v==='object'&&!Array.isArray(v)){
-    for(const [k,x] of Object.entries(v)){
+  if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){
+    for(const [k,x] of Object.entries(parsed)){
       if(typeof k==='string'&&typeof x==='string'&&k.length<300&&x.length<50&&x!=='미진행')out[k]=x;
     }
   }
@@ -33,25 +39,32 @@ function install(app){
   if(installed)return;
   installed=true;
 
-  app.get('/api/admin/problem-bank/:id',async(req,res,next)=>{
+  app.get('/api/admin/problem-bank/:id',async(req,res)=>{
     try{
       if(!req.session.user||req.session.user.role!=='admin')return res.status(403).json({error:'관리자 권한이 필요합니다.'});
-      await ensureTable();
       const id=Number(req.params.id);
       if(!Number.isInteger(id)||id<=0)return res.status(400).json({error:'학생 번호가 올바르지 않습니다.'});
-      const row=(await pool.query(`
-        SELECT u.id,u.name,u.username,p.schools,p.status,p.updated_at
-        FROM users u
-        LEFT JOIN problem_bank_progress p ON p.user_id=u.id
-        WHERE u.id=$1 AND u.role='student'
+      await ensureTable();
+
+      const student=(await pool.query('SELECT id,name,username FROM users WHERE id=$1 AND role=\'student\'',[id])).rows[0];
+      if(!student)return res.status(404).json({error:'학생을 찾을 수 없습니다.'});
+
+      // JSONB를 직접 객체로 받지 않고 text로 받아 한 번 더 안전하게 파싱한다.
+      // 특정 학생의 JSON 데이터가 이상해도 관리자 화면 전체가 실패하지 않도록 한다.
+      const progress=(await pool.query(`
+        SELECT schools::text AS schools_text,status::text AS status_text,updated_at
+        FROM problem_bank_progress
+        WHERE user_id=$1
       `,[id])).rows[0];
+
       res.set('Cache-Control','no-store');
-      if(!row)return res.status(404).json({error:'학생을 찾을 수 없습니다.'});
       return res.json({
-        id:row.id,name:row.name,username:row.username,
-        schools:cleanSchools(row.schools),
-        status:cleanStatus(row.status),
-        updated_at:row.updated_at||null
+        id:student.id,
+        name:student.name,
+        username:student.username,
+        schools:cleanSchools(progress?.schools_text),
+        status:cleanStatus(progress?.status_text),
+        updated_at:progress?.updated_at||null
       });
     }catch(err){
       console.error('problem bank admin detail fix',err);
@@ -59,12 +72,12 @@ function install(app){
     }
   });
 
-  app.get('/api/admin/problem-bank',async(req,res,next)=>{
+  app.get('/api/admin/problem-bank',async(req,res)=>{
     try{
       if(!req.session.user||req.session.user.role!=='admin')return res.status(403).json({error:'관리자 권한이 필요합니다.'});
       await ensureTable();
       const rows=(await pool.query(`
-        SELECT u.id,u.name,u.username,p.schools,p.status,p.updated_at
+        SELECT u.id,u.name,u.username,p.schools::text AS schools_text,p.status::text AS status_text,p.updated_at
         FROM users u
         LEFT JOIN problem_bank_progress p ON p.user_id=u.id
         WHERE u.role='student'
@@ -73,8 +86,8 @@ function install(app){
       res.set('Cache-Control','no-store');
       return res.json(rows.map(r=>({
         id:r.id,name:r.name,username:r.username,
-        schools:cleanSchools(r.schools),
-        status:cleanStatus(r.status),
+        schools:cleanSchools(r.schools_text),
+        status:cleanStatus(r.status_text),
         updated_at:r.updated_at||null
       })));
     }catch(err){
@@ -91,4 +104,4 @@ express.application.listen=function(...args){
   return originalListen.apply(app,args);
 };
 
-console.log('GREENSUM problem bank admin route fix loaded');
+console.log('GREENSUM problem bank admin route fix v2 loaded');

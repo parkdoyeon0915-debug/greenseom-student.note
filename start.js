@@ -57,7 +57,7 @@ express.response.send=function(body){
         e.preventDefault();
         e.stopPropagation();
         if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-        window.location.assign('/admin/problem-bank/'+encodeURIComponent(id));
+        window.location.assign('/admin-problem-bank.html?id='+encodeURIComponent(id));
       }
       document.addEventListener('click',go,true);
     })();</script>`;

@@ -11,6 +11,7 @@ require('./admin-kick-fix.js');
 require('./admin-problem-bank-binding-fix.js');
 require('./admin-problem-bank-page-fix.js');
 require('./admin-problem-bank-static-route-fix.js');
+require('./problem-bank-student-context-fix.js');
 
 const express=require('express');
 const originalProblemBankAdminSend=express.response.send;
@@ -57,7 +58,7 @@ express.response.send=function(body){
         e.preventDefault();
         e.stopPropagation();
         if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-        window.location.assign('/admin-problem-bank.html?id='+encodeURIComponent(id));
+        window.location.assign('/problem-bank.html?id='+encodeURIComponent(id));
       }
       document.addEventListener('click',go,true);
     })();</script>`;

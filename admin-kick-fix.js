@@ -9,8 +9,7 @@ const style=`<style id="admin-kick-fix-style">
 
 const script=`<script id="admin-kick-fix-script">(function(){
   function parseButton(btn){
-    if(!btn)return null;
-    const raw=btn.getAttribute('onclick')||'';
+    const raw=btn&&btn.getAttribute('onclick')||'';
     const m=raw.match(/kickStudent\\((\\d+),([\\s\\S]*)\\)/);
     if(!m)return null;
     let name='학생';
@@ -20,7 +19,8 @@ const script=`<script id="admin-kick-fix-script">(function(){
 
   async function doKick(btn,id,name){
     if(!btn||btn.dataset.kickBusy==='1')return;
-    if(!window.confirm(name+' 학생을 강퇴할까요?\\n\\n강퇴하면 해당 계정의 로그인이 차단됩니다. 기존 기록은 보존됩니다.'))return;
+    const ok=window.confirm(name+' 학생을 강퇴할까요?\\n\\n강퇴하면 해당 계정의 로그인이 차단됩니다. 기존 기록은 보존됩니다.');
+    if(!ok)return;
     btn.dataset.kickBusy='1';
     btn.disabled=true;
     btn.textContent='처리 중...';
@@ -41,8 +41,14 @@ const script=`<script id="admin-kick-fix-script">(function(){
     }
   }
 
+  window.kickStudent=function(id,name){
+    const btn=document.querySelector('#students .student .danger[data-kick-id="'+String(id)+'"]')||Array.from(document.querySelectorAll('#students .student .danger')).find(function(b){return String(b.dataset.kickId)===String(id)});
+    if(btn){doKick(btn,Number(id),String(name||'학생'));return false;}
+    return false;
+  };
+
   function install(){
-    document.querySelectorAll('#students .student .danger').forEach(btn=>{
+    document.querySelectorAll('#students .student .danger').forEach(function(btn){
       if(btn.dataset.kickFix==='1')return;
       const parsed=parseButton(btn);
       if(!parsed)return;
@@ -52,26 +58,31 @@ const script=`<script id="admin-kick-fix-script">(function(){
       btn.type='button';
       btn.removeAttribute('onclick');
       btn.addEventListener('click',function(e){
-        e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+        e.preventDefault();
+        e.stopImmediatePropagation();
         doKick(btn,parsed.id,parsed.name);
       },true);
     });
   }
 
-  // Some deployments have a transparent layer above the action area. Capture the
-  // pointer at document level and use button geometry so the kick action still
-  // works even when the visual button is not the event target.
-  function pointerFallback(e){
+  // Final fallback: detect a real CLICK by coordinates, even if another element
+  // receives the browser's event. This is intentionally click (not pointerdown)
+  // so the confirmation dialog is triggered by a normal user click.
+  function clickFallback(e){
     if(e.button!==undefined&&e.button!==0)return;
     const x=e.clientX,y=e.clientY;
-    document.querySelectorAll('#students .student .danger').forEach(btn=>{
-      if(btn.dataset.kickFix!=='1')return;
+    const buttons=document.querySelectorAll('#students .student .danger');
+    for(let i=0;i<buttons.length;i++){
+      const btn=buttons[i];
+      if(btn.dataset.kickFix!=='1')continue;
       const r=btn.getBoundingClientRect();
       if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom){
-        e.preventDefault();e.stopPropagation();
+        e.preventDefault();
+        e.stopImmediatePropagation();
         doKick(btn,Number(btn.dataset.kickId),btn.dataset.kickName||'학생');
+        return;
       }
-    });
+    }
   }
 
   function boot(){
@@ -82,8 +93,7 @@ const script=`<script id="admin-kick-fix-script">(function(){
       new MutationObserver(install).observe(root,{childList:true,subtree:true});
     }
   }
-  document.addEventListener('pointerdown',pointerFallback,true);
-  document.addEventListener('mousedown',pointerFallback,true);
+  document.addEventListener('click',clickFallback,true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
   setTimeout(boot,50);setTimeout(boot,300);setTimeout(boot,1000);
 })();</script>`;
@@ -95,4 +105,4 @@ express.response.send=function(body){
   return originalSend.call(this,body);
 };
 
-console.log('GREENSUM admin kick UI fix loaded');
+console.log('GREENSUM admin kick click fix loaded');

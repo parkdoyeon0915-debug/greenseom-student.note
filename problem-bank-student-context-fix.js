@@ -65,6 +65,8 @@ function install(app){
         const targetId=Number(params.get('id')||0);
         if(!Number.isInteger(targetId)||targetId<=0)return;
         const originalFetch=window.fetch.bind(window);
+        const originalSetItem=Storage.prototype.setItem;
+        const originalRemoveItem=Storage.prototype.removeItem;
         let active=false;
         function targetUrl(){return '/api/admin/problem-bank/'+encodeURIComponent(targetId)}
         function rewrite(input,init){
@@ -77,6 +79,14 @@ function install(app){
           if(!active)return originalFetch(input,init);
           const pair=rewrite(input,init);
           return originalFetch(pair[0],pair[1]);
+        };
+        Storage.prototype.setItem=function(k,v){
+          originalSetItem.call(this,k,v);
+          if(active&&k==='greensum_problem_bank_photos')originalSetItem.call(this,'greensum_problem_bank_photos_student_'+targetId,v);
+        };
+        Storage.prototype.removeItem=function(k){
+          originalRemoveItem.call(this,k);
+          if(active&&k==='greensum_problem_bank_photos')originalRemoveItem.call(this,'greensum_problem_bank_photos_student_'+targetId);
         };
         async function boot(){
           try{
@@ -91,7 +101,12 @@ function install(app){
             const p=await r.json().catch(()=>({}));
             if(!r.ok)throw Error(p.error||('HTTP '+r.status));
             localStorage.setItem('greensum_problem_bank_schools',JSON.stringify(Array.isArray(p.schools)?p.schools:['','','']));
+            for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith('greensum_problem_bank_status_'))localStorage.removeItem(k);}
             Object.keys(p.status||{}).forEach(k=>localStorage.setItem('greensum_problem_bank_status_'+k,p.status[k]));
+            const photoNamespace='greensum_problem_bank_photos_student_'+targetId;
+            const photos=localStorage.getItem(photoNamespace);
+            if(photos!==null)localStorage.setItem('greensum_problem_bank_photos',photos);
+            else localStorage.removeItem('greensum_problem_bank_photos');
             document.title=(p.name||'학생')+' · 문제은행 · 그린섬';
             const brand=document.querySelector('.brand');
             if(brand)brand.innerHTML='<b>G</b> '+String(p.name||'학생')+' · 문제은행';

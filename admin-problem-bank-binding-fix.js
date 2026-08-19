@@ -8,6 +8,7 @@ const style=`<style id="admin-problem-bank-binding-style">
 </style>`;
 const script=`<script id="admin-problem-bank-binding-fix-v2">(function(){
 function getId(row){
+  const direct=Number(row.dataset.studentId||0);if(direct)return direct;
   const el=row.querySelector('[onclick*="show("]');
   const raw=el&&el.getAttribute('onclick')||'';
   const m=raw.match(/show\\((\\d+)\\)/);
@@ -75,4 +76,4 @@ express.response.send=function(body){
   }
   return originalSend.call(this,body);
 };
-console.log('GREENSUM admin problem bank binding v2 loaded');
+console.log('GREENSUM admin problem bank binding v3 loaded');

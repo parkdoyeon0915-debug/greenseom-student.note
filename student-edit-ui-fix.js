@@ -6,14 +6,26 @@ const patch=`<style id="student-edit-ui-style">
 .record-actions{display:flex;gap:7px;margin-top:10px;align-items:center}.record-actions .btn{padding:7px 11px;font-size:12px}.record-actions .delete{color:#b42318;border-color:#efb5af}.student-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid #e5e9ed}.student-modal-actions .delete{color:#b42318;border-color:#efb5af}.teacher-readonly{background:#f6f8fa!important;color:#6d7680!important;cursor:not-allowed}
 </style><script id="student-edit-ui-script">
 (function(){
-function editDiagFromModal(id,modal){
+async function editDiagFromModal(id,modal){
   if(!id)return;
   if(modal)modal.style.display='none';
-  // 기존 날짜별 기록 카드와 동일한 순서로 실행합니다.
-  // loadDiag가 먼저 diagId를 설정한 뒤 go가 자가진단 화면을 엽니다.
-  // 강제 scrollTo/지연 호출을 사용하지 않아 화면이 불필요하게 최상단으로 튀지 않습니다.
-  if(typeof loadDiag==='function')loadDiag(id);
-  if(typeof go==='function')go('diagnosis');
+  try{
+    // 화면의 오래된 배열을 믿지 않고 서버에서 최신 기록을 다시 가져옵니다.
+    const r=await fetch('/api/diagnoses',{credentials:'same-origin',cache:'no-store'});
+    if(!r.ok)throw new Error('자가진단 기록을 불러오지 못했습니다.');
+    const data=await r.json();
+    const rows=Array.isArray(data)?data:(data.diagnoses||[]);
+    const record=rows.find(x=>Number(x.id)===Number(id));
+    if(!record)throw new Error('선택한 자가진단 기록을 찾지 못했습니다.');
+
+    // 기존 앱의 배열을 최신 데이터로 교체한 뒤 편집 화면을 엽니다.
+    if(typeof diagnoses!=='undefined')diagnoses=rows;
+    if(typeof go==='function')go('diagnosis');
+    if(typeof loadDiag==='function')loadDiag(Number(id));
+    else throw new Error('자가진단 편집 기능을 찾지 못했습니다.');
+  }catch(err){
+    alert(err.message||'수정 화면을 불러오지 못했습니다.');
+  }
 }
 function addDiagActions(){
   const list=document.getElementById('diagList');

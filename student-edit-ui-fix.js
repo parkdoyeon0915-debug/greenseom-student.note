@@ -1,20 +1,69 @@
-// 학생 페이지: 기록 목록에서 수정/삭제 버튼을 바로 사용할 수 있게 보강합니다.
+// 학생 페이지 전용: 날짜별 자가진단 기록에 수정/삭제 버튼을 추가합니다.
 // 관리자 페이지에는 적용하지 않습니다.
 const express=require('express');
 const originalSend=express.response.send;
 const patch=`<style id="student-edit-ui-style">
-.record{position:relative}.record-actions{display:flex;gap:6px;margin-top:10px}.record-actions .btn{padding:7px 10px;font-size:12px}.record-actions .delete{color:#b42318;border-color:#efb5af}.teacher-readonly{background:#f6f8fa!important;color:#6d7680!important;cursor:not-allowed}
+.record-actions{display:flex;gap:7px;margin-top:10px;align-items:center}.record-actions .btn{padding:7px 11px;font-size:12px}.record-actions .delete{color:#b42318;border-color:#efb5af}.teacher-readonly{background:#f6f8fa!important;color:#6d7680!important;cursor:not-allowed}
 </style><script id="student-edit-ui-script">
 (function(){
-function esc(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
-function cardDiagFixed(x){const id=Number(x.id);return `<div class="record"><div onclick="loadDiag(${id});go('diagnosis')" style="cursor:pointer"><div class="thumb">${x.photo?`<img src="${esc(x.photo)}">`:'사진 없음'}</div><b>${esc(x.date)}</b><div class="muted">${esc(x.subject||'오늘의 그림')} · ${Number(x.total||0)}/25점</div></div><div class="record-actions"><button class="btn" type="button" onclick="loadDiag(${id});go('diagnosis')">수정</button><button class="btn delete" type="button" onclick="studentDeleteDiag(event,${id})">삭제</button></div></div>`;}
-function cardPatternFixed(x){const id=Number(x.id);return `<div class="record"><div onclick="loadPattern(${id});go('patterns')" style="cursor:pointer"><div class="thumb">${x.photo?`<img src="${esc(x.photo)}">`:'패턴 사진 없음'}</div><b>${esc(x.name)}</b><div class="muted">${Array.isArray(x.images)?x.images.length:0}개의 적용 그림</div></div><div class="record-actions"><button class="btn" type="button" onclick="loadPattern(${id});go('patterns')">수정</button><button class="btn delete" type="button" onclick="studentDeletePattern(event,${id})">삭제</button></div></div>`;}
-function decorateDiagList(){const list=document.getElementById('diagList');if(!list)return;list.querySelectorAll('.record').forEach(card=>{if(card.querySelector('.record-actions'))return;const click=card.querySelector('[onclick*="loadDiag"]');if(!click)return;const m=String(click.getAttribute('onclick')||'').match(/loadDiag\(\s*(\d+)\s*\)/);if(!m)return;const id=Number(m[1]);const box=document.createElement('div');box.className='record-actions';const edit=document.createElement('button');edit.type='button';edit.className='btn';edit.textContent='수정';edit.onclick=e=>{e.preventDefault();e.stopPropagation();loadDiag(id);go('diagnosis')};const del=document.createElement('button');del.type='button';del.className='btn delete';del.textContent='삭제';del.onclick=e=>{e.preventDefault();e.stopPropagation();studentDeleteDiag(e,id)};box.append(edit,del);card.appendChild(box);});}
-async function studentDeleteDiag(ev,id){ev?.preventDefault();ev?.stopPropagation();if(!confirm('이 자가진단 기록을 삭제할까요?'))return;const r=await fetch('/api/diagnoses/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){const j=await r.json().catch(()=>({}));return alert(j.error||'삭제에 실패했습니다.')}await loadAll();newDiag();go('diagnosis')}
-async function studentDeletePattern(ev,id){ev?.preventDefault();ev?.stopPropagation();if(!confirm('이 패턴 연구노트를 삭제할까요?'))return;const r=await fetch('/api/patterns/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){const j=await r.json().catch(()=>({}));return alert(j.error||'삭제에 실패했습니다.')}await loadAll();newPattern();go('patterns')}
-window.cardDiag=cardDiagFixed;window.cardPattern=cardPatternFixed;window.studentDeleteDiag=studentDeleteDiag;window.studentDeletePattern=studentDeletePattern;
-function protectTeacherComment(){const el=document.getElementById('diagTeacher');if(!el)return;el.readOnly=true;el.classList.add('teacher-readonly');el.title='선생님 코멘트는 학생이 수정할 수 없습니다.';const label=el.previousElementSibling;if(label&&label.tagName==='B')label.textContent='선생님 코멘트 · 읽기 전용';}
-function boot(){decorateDiagList();protectTeacherComment();new MutationObserver(()=>{decorateDiagList();protectTeacherComment()}).observe(document.body,{childList:true,subtree:true});}
+function addDiagActions(){
+  const list=document.getElementById('diagList');
+  if(!list)return;
+  list.querySelectorAll('.record').forEach(function(card){
+    if(card.querySelector('.record-actions'))return;
+    const clickable=card.querySelector('[onclick*="loadDiag"]');
+    if(!clickable)return;
+    const raw=String(clickable.getAttribute('onclick')||'');
+    const match=raw.match(/loadDiag\\(\\s*(\\d+)\\s*\\)/);
+    if(!match)return;
+    const id=Number(match[1]);
+    if(!id)return;
+    const box=document.createElement('div');
+    box.className='record-actions';
+    const edit=document.createElement('button');
+    edit.type='button';
+    edit.className='btn';
+    edit.textContent='수정';
+    edit.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      if(typeof loadDiag==='function')loadDiag(id);
+      if(typeof go==='function')go('diagnosis');
+    });
+    const del=document.createElement('button');
+    del.type='button';
+    del.className='btn delete';
+    del.textContent='삭제';
+    del.addEventListener('click',function(e){studentDeleteDiag(e,id);});
+    box.append(edit,del);
+    card.appendChild(box);
+  });
+}
+async function studentDeleteDiag(ev,id){
+  if(ev){ev.preventDefault();ev.stopPropagation();}
+  if(!confirm('이 자가진단 기록을 삭제할까요?'))return;
+  try{
+    const r=await fetch('/api/diagnoses/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});
+    if(!r.ok){const j=await r.json().catch(function(){return {};});alert(j.error||'삭제에 실패했습니다.');return;}
+    if(typeof loadAll==='function')await loadAll();
+    if(typeof go==='function')go('diagnosis');
+  }catch(e){alert('삭제 중 오류가 발생했습니다.');}
+}
+window.studentDeleteDiag=studentDeleteDiag;
+function protectTeacherComment(){
+  const el=document.getElementById('diagTeacher');
+  if(!el)return;
+  el.readOnly=true;
+  el.classList.add('teacher-readonly');
+  el.title='선생님 코멘트는 학생이 수정할 수 없습니다.';
+}
+function boot(){
+  addDiagActions();
+  protectTeacherComment();
+  new MutationObserver(function(){addDiagActions();protectTeacherComment();}).observe(document.body,{childList:true,subtree:true});
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();</script>`;
-express.response.send=function(body){if(typeof body==='string'&&this.req&&(this.req.path==='/'||this.req.path==='/index.html')&&body.includes('</body>'))body=body.replace('</body>',patch+'</body>');return originalSend.call(this,body)};
+express.response.send=function(body){
+  if(typeof body==='string'&&this.req&&(this.req.path==='/'||this.req.path==='/index.html')&&body.includes('</body>'))body=body.replace('</body>',patch+'</body>');
+  return originalSend.call(this,body);
+};

@@ -19,6 +19,7 @@ require('./problem-bank-student-storage-isolation-fix.js');
 require('./problem-bank-admin-data-final-fix.js');
 require('./problem-bank-server-authoritative-final-fix.js');
 require('./problem-bank-final-authority.js');
+require('./problem-bank-server-controls.js');
 
 const express=require('express');
 const originalProblemBankAdminSend=express.response.send;

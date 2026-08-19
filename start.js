@@ -10,6 +10,7 @@ require('./admin-count-fix.js');
 require('./admin-kick-fix.js');
 require('./admin-problem-bank-binding-fix.js');
 require('./admin-problem-bank-page-fix.js');
+require('./admin-problem-bank-static-route-fix.js');
 
 const express=require('express');
 const originalProblemBankAdminSend=express.response.send;
@@ -41,10 +42,8 @@ function bind(){document.querySelectorAll('#students .student').forEach(row=>{co
 function boot(){bind();const root=document.getElementById('students');if(root&&!root.dataset.pbFinalObserver){root.dataset.pbFinalObserver='1';new MutationObserver(()=>setTimeout(bind,0)).observe(root,{childList:true,subtree:true});}setTimeout(bind,50);setTimeout(bind,300);setTimeout(bind,1000);setTimeout(bind,2000);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();</script>`;
-express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</head>',finalProblemBankAdminStyle+'</head>').replace('</body>',finalProblemBankAdminScript+'</body>');return originalProblemBankAdminSend.call(this,body)};
+express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</head>',finalProblemBankAdminStyle+'</head>').replace('</body>',finalProblemBankAdminScript+'</body>');return originalProblemBankAdminSend.call(this,body);};
 
-// Final navigation guard: use a static HTML page so the link never depends on an Express route.
-// The page itself fetches the student's progress through the existing authenticated admin API.
 const originalNavigationSend=express.response.send;
 express.response.send=function(body){
   if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>')){
@@ -66,4 +65,4 @@ express.response.send=function(body){
   }
   return originalNavigationSend.call(this,body);
 };
-console.log('GREENSUM admin problem bank static navigation guard loaded');
+console.log('GREENSUM admin problem bank final navigation guard loaded');

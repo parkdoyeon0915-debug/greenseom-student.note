@@ -1,3 +1,6 @@
+require('./problem-bank-student-route-fix.js');
+require('./problem-bank-student-url-fix.js');
+
 const fs=require('fs');
 const originalReadFileSync=fs.readFileSync;
 

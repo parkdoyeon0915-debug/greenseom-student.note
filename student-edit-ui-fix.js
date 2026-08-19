@@ -39,7 +39,16 @@ const patch=`<style id="student-edit-ui-style">
 function q(s){return document.querySelector(s)}
 function qs(s){return document.querySelectorAll(s)}
 var currentEditId=null;
+function ensureScoreRows(){
+  var host=q('#scoreRows');if(!host)return;
+  if(host.children.length)return;
+  var labels=['문제 분석','형태','완성도','표현','구성'];
+  host.innerHTML=labels.map(function(label,i){
+    return '<div class="scorer"><div class="label">'+label+'</div>'+[1,2,3,4,5].map(function(v){return '<div><label><input type="radio" name="s'+i+'" value="'+v+'"></label></div>'}).join('')+'</div>';
+  }).join('');
+}
 function setScores(values){
+  ensureScoreRows();
   qs('input[name^="s"]').forEach(function(x){x.checked=false});
   (values||[]).forEach(function(v,i){var el=q('input[name=s'+i+'][value="'+v+'"]');if(el)el.checked=true});
   calcScores();
@@ -58,6 +67,7 @@ function newDiag(){
 window.newDiag=newDiag;
 async function loadDiag(id){
   try{
+    ensureScoreRows();
     var r=await fetch('/api/diagnoses',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw new Error('자가진단 기록을 불러오지 못했습니다.');
     var data=await r.json();var x=data.find(function(a){return Number(a.id)===Number(id)});if(!x)throw new Error('선택한 자가진단 기록을 찾지 못했습니다.');
     currentEditId=Number(x.id);window.__studentCurrentEditId=currentEditId;
@@ -71,6 +81,7 @@ async function loadDiag(id){
 }
 window.loadDiag=loadDiag;
 async function saveDiag(){
+  ensureScoreRows();
   var fd=new FormData();fd.append('date',q('#diagDate')?.value||'');fd.append('subject',q('#diagSubject')?.value||'');fd.append('notes',q('#diagNotes')?.value||'');fd.append('improve',q('#diagImprove')?.value||'');
   for(var i=0;i<5;i++){var el=q('input[name=s'+i+']:checked');fd.append(['problem_analysis','form_score','completion','expression','composition'][i],el?el.value:'0')}
   var file=q('#diagFile');if(file&&file.files&&file.files[0])fd.append('photo',file.files[0]);
@@ -93,7 +104,7 @@ function addDiagActions(){
     var box=document.createElement('div');box.className='record-actions';var edit=document.createElement('button');edit.type='button';edit.className='btn';edit.textContent='수정';edit.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();loadDiag(id)});var del=document.createElement('button');del.type='button';del.className='btn delete';del.textContent='삭제';del.addEventListener('click',function(e){studentDeleteDiag(e,id)});box.append(edit,del);card.appendChild(box);
   })
 }
-function boot(){addDiagActions();protectTeacherComment();new MutationObserver(function(){addDiagActions();protectTeacherComment()}).observe(document.body,{childList:true,subtree:true})}
+function boot(){ensureScoreRows();addDiagActions();protectTeacherComment();new MutationObserver(function(){ensureScoreRows();addDiagActions();protectTeacherComment()}).observe(document.body,{childList:true,subtree:true})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();</script>`;
 express.response.send=function(body){if(typeof body==='string'&&this.req&&(this.req.path==='/'||this.req.path==='/index.html')&&body.includes('</body>'))body=body.replace('</body>',patch+'</body>');return originalSend.call(this,body)};

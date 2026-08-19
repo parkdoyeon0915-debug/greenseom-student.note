@@ -61,3 +61,4 @@ function boot(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();</script>`;
 express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');return originalSend.call(this,body)};
+require('./problem-bank-student-context-fix.js');

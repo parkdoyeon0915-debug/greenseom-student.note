@@ -12,6 +12,7 @@ require('./admin-problem-bank-binding-fix.js');
 require('./admin-problem-bank-page-fix.js');
 require('./admin-problem-bank-static-route-fix.js');
 require('./problem-bank-student-context-fix.js');
+require('./problem-bank-static-context-final-fix.js');
 
 const express=require('express');
 const originalProblemBankAdminSend=express.response.send;

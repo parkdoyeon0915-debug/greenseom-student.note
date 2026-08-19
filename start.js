@@ -24,6 +24,46 @@ require('./student-edit-ui-fix.js');
 
 const express=require('express');
 const originalProblemBankAdminSend=express.response.send;
+
+// 학생 페이지의 수정/삭제 UI를 마지막 단계에서 강제로 보장합니다.
+const finalStudentEditScript=`<style id="final-student-edit-style">
+.record-actions{display:flex!important;gap:7px;margin-top:10px;align-items:center}.record-actions .btn{padding:7px 11px;font-size:12px}.record-actions .delete{color:#b42318;border-color:#efb5af}.student-modal-actions{display:flex!important;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid #e5e9ed}.student-modal-actions .delete{color:#b42318;border-color:#efb5af}
+</style><script id="final-student-edit-script">(function(){
+function idOf(card){return Number(card&&card.dataset&&card.dataset.id||0)}
+function addListActions(){
+  document.querySelectorAll('#diagList .record,#recentDiag .record').forEach(function(card){
+    if(card.querySelector('.record-actions'))return;
+    var id=idOf(card);if(!id)return;
+    var box=document.createElement('div');box.className='record-actions';
+    var edit=document.createElement('button');edit.type='button';edit.className='btn';edit.textContent='수정';
+    edit.onclick=async function(e){e.preventDefault();e.stopPropagation();if(typeof window.loadDiag==='function'){await window.loadDiag(id);if(typeof window.go==='function')window.go('diagnosis')}};
+    var del=document.createElement('button');del.type='button';del.className='btn delete';del.textContent='삭제';
+    del.onclick=async function(e){e.preventDefault();e.stopPropagation();if(!confirm('이 자가진단 기록을 삭제할까요?'))return;try{var r=await fetch('/api/diagnoses/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){var j=await r.json().catch(function(){return {}});throw new Error(j.error||'삭제에 실패했습니다.')}location.reload()}catch(err){alert(err.message||'삭제 중 오류가 발생했습니다.')}};
+    box.append(edit,del);card.appendChild(box);
+  });
+}
+function addModalActions(){
+  var modal=document.getElementById('stableRecordModal');if(!modal||modal.style.display==='none')return;
+  var host=document.getElementById('studentRecordActions');if(!host||host.dataset.finalReady==='1')return;
+  var id=Number(modal.dataset.recordId||0);if(!id)return;
+  host.dataset.finalReady='1';host.className='student-modal-actions';
+  var edit=document.createElement('button');edit.type='button';edit.className='btn';edit.textContent='수정';
+  edit.onclick=async function(e){e.preventDefault();e.stopPropagation();modal.style.display='none';if(typeof window.loadDiag==='function'){await window.loadDiag(id);if(typeof window.go==='function')window.go('diagnosis')}};
+  var del=document.createElement('button');del.type='button';del.className='btn delete';del.textContent='삭제';
+  del.onclick=async function(e){e.preventDefault();e.stopPropagation();if(!confirm('이 자가진단 기록을 삭제할까요?'))return;try{var r=await fetch('/api/diagnoses/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'});if(!r.ok){var j=await r.json().catch(function(){return {}});throw new Error(j.error||'삭제에 실패했습니다.')}modal.style.display='none';location.reload()}catch(err){alert(err.message||'삭제에 실패했습니다.')}};
+  host.append(edit,del);
+}
+function protectTeacher(){var el=document.getElementById('diagTeacher');if(el){el.readOnly=true;el.classList.add('teacher-readonly')}}
+function boot(){addListActions();addModalActions();protectTeacher()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+new MutationObserver(boot).observe(document.body,{childList:true,subtree:true});
+})();</script>`;
+const finalStudentEditSend=express.response.send;
+express.response.send=function(body){
+  if(typeof body==='string'&&this.req&&(this.req.path==='/'||this.req.path==='/index.html')&&body.includes('</body>'))body=body.replace('</body>',finalStudentEditScript+'</body>');
+  return finalStudentEditSend.call(this,body);
+};
+
 const finalProblemBankAdminStyle=`<style id="admin-problem-bank-final-style">
 #students .student{position:relative;flex-wrap:wrap}
 #students .student>div:last-child{position:relative;z-index:10002;display:flex!important;gap:8px;flex-wrap:wrap;align-items:center}
@@ -53,4 +93,5 @@ function boot(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 new MutationObserver(boot).observe(document.body,{childList:true,subtree:true});
 })();</script>`;
-express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin-problem-bank.html'&&body.includes('</body>'))body=body.replace('</head>',finalProblemBankAdminStyle+'</head>').replace('</body>',finalProblemBankAdminScript+'</body>');return originalProblemBankAdminSend.call(this,body)};
+const previousSend=express.response.send;
+express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin-problem-bank.html'&&body.includes('</body>'))body=body.replace('</head>',finalProblemBankAdminStyle+'</head>').replace('</body>',finalProblemBankAdminScript+'</body>');return previousSend.call(this,body)};

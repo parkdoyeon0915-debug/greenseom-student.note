@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>그린섬 관리자</title>
 <style>
-body{margin:0;background:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,"Malgun Gothic","Noto Sans KR",sans-serif;color:#26313b}.bar{height:65px;background:#fff;border-bottom:1px solid #dce2e8;display:flex;justify-content:space-between;align-items:center;padding:0 22px}.brand{font-weight:900}.brand b{color:#c72525}.wrap{max-width:1200px;margin:auto;padding:24px}.card{background:#fff;border:1px solid #dce2e8;border-radius:18px;padding:20px;margin-bottom:18px}.student{padding:15px;border-top:1px solid #e5e9ed;display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer}.student:hover{background:#f7f9fb}.btn{border:1px solid #d6dde5;background:#fff;padding:9px 12px;border-radius:9px;font-weight:800;cursor:pointer}.primary{background:#283a4d;color:#fff}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.item{border:1px solid #e1e6eb;border-radius:12px;padding:12px;cursor:pointer}.item:hover{box-shadow:0 4px 18px #0001}.thumb{height:150px;background:#f2f4f6;border-radius:9px;overflow:hidden}.thumb img{width:100%;height:100%;object-fit:contain}#recordModal{position:fixed;inset:0;background:#18212b88;display:none;align-items:center;justify-content:center;padding:20px;z-index:9999;box-sizing:border-box}#recordModal.open{display:flex}.record-modal-box{width:min(920px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;padding:24px;box-shadow:0 20px 70px #0004;box-sizing:border-box}.record-modal-head{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}.record-modal-head h2{margin:0}.detail-photo{width:100%;max-height:55vh;object-fit:contain;background:#f3f5f7;border-radius:12px;cursor:zoom-in}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.detail-box{border:1px solid #e1e6eb;border-radius:12px;padding:14px}.detail-box h4{margin:0 0 8px}.admin-note{width:100%;min-height:110px;border:1px solid #d6dde5;border-radius:11px;padding:12px;font:inherit;resize:vertical;box-sizing:border-box}@media(max-width:700px){.grid{grid-template-columns:1fr}.wrap{padding:10px}.detail-grid{grid-template-columns:1fr}.record-modal-box{padding:16px}.student{align-items:flex-start}}
+body{margin:0;background:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,"Malgun Gothic","Noto Sans KR",sans-serif;color:#26313b}.bar{height:65px;background:#fff;border-bottom:1px solid #dce2e8;display:flex;justify-content:space-between;align-items:center;padding:0 22px}.brand{font-weight:900}.brand b{color:#c72525}.wrap{max-width:1200px;margin:auto;padding:24px}.card{background:#fff;border:1px solid #dce2e8;border-radius:18px;padding:20px;margin-bottom:18px}.student{padding:15px;border-top:1px solid #e5e9ed;display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer}.student:hover{background:#f7f9fb}.btn{border:1px solid #d6dde5;background:#fff;padding:9px 12px;border-radius:9px;font-weight:800;cursor:pointer}.primary{background:#283a4d;color:#fff}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.item{border:1px solid #e1e6eb;border-radius:12px;padding:12px;cursor:pointer}.item:hover{box-shadow:0 4px 18px #0001}.thumb{height:150px;background:#f2f4f6;border-radius:9px;overflow:hidden}.thumb img{width:100%;height:100%;object-fit:contain}#recordModal{position:fixed;inset:0;background:#18212b88;display:none;align-items:center;justify-content:center;padding:20px;z-index:9999;box-sizing:border-box}#recordModal.open{display:flex}.record-modal-box{width:min(920px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;padding:24px;box-shadow:0 20px 70px #0004;box-sizing:border-box}.record-modal-head{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}.record-modal-head h2{margin:0}.detail-photo{width:100%;max-height:55vh;object-fit:contain;background:#f3f5f7;border-radius:12px;cursor:zoom-in}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.detail-box{border:1px solid #e1e6eb;border-radius:12px;padding:14px}.detail-box h4{margin:0 0 8px}.admin-comment-entry{border:1px solid #dce2e8;border-radius:11px;padding:12px;background:#fff;margin-top:9px}.admin-comment-author{font-weight:900;margin-bottom:6px}.admin-comment-text{white-space:pre-wrap;line-height:1.6}.admin-comment-date{margin-top:7px;font-size:11px;color:#929aa2}.admin-comment-empty{padding:13px;border:1px dashed #d6dde5;border-radius:10px;color:#7d8791}.admin-comment-new{margin-top:12px;padding:12px;border:1px solid #dce2e8;border-radius:11px;background:#f8fafc}.admin-comment-input{width:100%;min-height:110px;border:1px solid #d6dde5;border-radius:10px;padding:12px;font:inherit;resize:vertical;box-sizing:border-box}.admin-comment-error{padding:13px;border:1px solid #f0caca;border-radius:10px;background:#fff5f5;color:#a33}.admin-note{width:100%;min-height:110px;border:1px solid #d6dde5;border-radius:11px;padding:12px;font:inherit;resize:vertical;box-sizing:border-box}@media(max-width:700px){.grid{grid-template-columns:1fr}.wrap{padding:10px}.detail-grid{grid-template-columns:1fr}.record-modal-box{padding:16px}.student{align-items:flex-start}}
 </style>
 </head>
 <body>
@@ -18,11 +18,67 @@ const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const nl=v=>esc(v||'기록 없음').replace(/\n/g,'<br>');
 async function jsonFetch(url,options){const r=await fetch(url,options);const j=await r.json().catch(()=>({error:'응답을 읽을 수 없습니다.'}));if(!r.ok)throw new Error(j.error||('요청 실패: '+r.status));return j;}
-async function init(){try{const m=await jsonFetch('/api/me');if(!m.user||m.user.role!=='admin'){location.href='/';return}await loadStudents()}catch(e){$('#students').textContent='학생 목록을 불러오지 못했습니다: '+e.message}}
+async function init(){try{const m=await jsonFetch('/api/me');if(!m.user||m.user.role!=='admin'){location.href='/';return}window.__greensumAdminUser=m.user;await loadStudents()}catch(e){$('#students').textContent='학생 목록을 불러오지 못했습니다: '+e.message}}
 async function loadStudents(){const a=await jsonFetch('/api/admin/students');$('#students').innerHTML=a.length?a.map(s=>`<div class="student" data-student-id="${Number(s.id)}" role="button" tabindex="0"><div><b>${esc(s.name)}</b> · ${esc(s.username)}<br><small>자가진단 ${Number(s.diagnoses)||0}개 · 패턴 ${Number(s.patterns)||0}개 · 최근 ${esc(s.last_date||'-')}</small></div><button class="btn" type="button" data-view-id="${Number(s.id)}">기록 보기</button></div>`).join(''):'학생이 없습니다.';document.querySelectorAll('[data-student-id]').forEach(el=>{el.addEventListener('click',e=>{if(!e.target.closest('button'))show(Number(el.dataset.studentId))});el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show(Number(el.dataset.studentId))}})});document.querySelectorAll('[data-view-id]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();show(Number(btn.dataset.viewId))}))}
 async function show(id){try{const x=await jsonFetch('/api/admin/students/'+encodeURIComponent(id));$('#title').textContent=x.student.name+' 학생의 기록';const d=(x.diagnoses||[]).map(r=>`<div class="item" data-diagnosis-id="${Number(r.id)}"><div class="thumb">${r.photo?`<img src="${esc(r.photo)}" alt="그림">`:'사진 없음'}</div><b>${esc(r.date)}</b><p>${esc(r.subject||'')} · <strong>${Number(r.total)||0}/25</strong></p><small>${esc(r.notes||'')}</small><br><small>개선: ${esc(r.improve||'-')}</small></div>`).join('');const p=(x.patterns||[]).map(r=>`<div class="item"><div class="thumb">${r.photo?`<img src="${esc(r.photo)}" alt="패턴">`:'사진 없음'}</div><b>${esc(r.name)}</b><p>적용 그림 ${(r.images||[]).length}장</p><small>${esc(r.must_keep||'')}</small></div>`).join('');$('#detail').innerHTML=`<h3>🎨 그림 자가진단</h3><div class="grid">${d||'기록 없음'}</div><h3>🧵 패턴 연구노트</h3><div class="grid">${p||'기록 없음'}</div>`;document.querySelectorAll('[data-diagnosis-id]').forEach(el=>el.addEventListener('click',()=>openRecord(Number(el.dataset.diagnosisId))))}catch(e){alert('학생 기록을 불러오지 못했습니다.\n'+e.message)}}
-async function openRecord(id){try{const r=await jsonFetch('/api/admin/diagnoses/'+encodeURIComponent(id));$('#recordModalTitle').textContent=r.student.name+' · 그림 자가진단';$('#recordModalBody').innerHTML=`${r.photo?`<img class="detail-photo" src="${esc(r.photo)}" alt="학생 그림" id="detailPhoto">`:''}<div class="detail-grid" style="margin-top:15px"><div class="detail-box"><h4>기본 정보</h4><div>날짜 · ${esc(r.date||'-')}</div><div>소재 · ${esc(r.subject||'-')}</div><div>총점 · <b>${Number(r.total)||0} / 25</b></div></div><div class="detail-box"><h4>학생 기록</h4><div style="white-space:pre-wrap">${nl(r.notes)}</div><hr><h4>앞으로 개선할 점</h4><div style="white-space:pre-wrap">${nl(r.improve)}</div></div></div><div class="detail-box" style="margin-top:14px"><h4>도연&amp;인혜T의 한마디 <small style="font-weight:normal;color:#7d8791">관리자 전용</small></h4><textarea id="adminTeacherNote" class="admin-note" placeholder="관리자만 작성할 수 있습니다.">${esc(r.teacher_note||'')}</textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn primary" id="saveTeacherBtn">저장</button></div></div>`;$('#recordModal').classList.add('open');$('#recordModal').setAttribute('aria-hidden','false');$('#detailPhoto')?.addEventListener('click',()=>window.open(r.photo,'_blank'));$('#saveTeacherBtn').addEventListener('click',()=>saveTeacherNote(r.id))}catch(e){alert('기록 상세를 불러오지 못했습니다.\n'+e.message)}}
-async function saveTeacherNote(id){const note=$('#adminTeacherNote').value;try{await jsonFetch('/api/admin/diagnoses/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({teacher_note:note})});alert('도연&인혜T의 한마디가 저장되었습니다.')}catch(e){alert('저장에 실패했습니다.\n'+e.message)}}
+function parseTeacherComments(value){
+  if(!value)return[];
+  try{
+    const parsed=JSON.parse(value);
+    if(Array.isArray(parsed))return parsed.filter(c=>c&&String(c.comment||'').trim());
+    if(parsed&&typeof parsed==='object'&&String(parsed.comment||'').trim())return[parsed];
+  }catch(e){
+    if(String(value).trim())return[{id:'legacy',admin_id:'legacy',admin_name:'선생님',comment:String(value),created_at:null}];
+  }
+  return[];
+}
+function teacherLabel(c){
+  const id=String(c?.admin_id||c?.admin_username||'').toLowerCase();
+  if(id==='doyean7')return'도연T';
+  let n=String(c?.admin_name||'선생님').trim();
+  if(!n||n==='관리자'||n==='선생님')return'선생님';
+  return /T$/.test(n)?n:n+'T';
+}
+function commentEntry(c){
+  return `<div class="admin-comment-entry"><div class="admin-comment-author">${esc(teacherLabel(c))}</div><div class="admin-comment-text">${esc(c.comment)}</div>${c.created_at?`<div class="admin-comment-date">${esc(new Date(c.created_at).toLocaleString('ko-KR'))}</div>`:''}</div>`;
+}
+function renderTeacherComments(id,value){
+  const comments=parseTeacherComments(value);
+  const current=window.__greensumAdminUser||{};
+  const label=teacherLabel({admin_id:current.username||current.id,admin_name:current.name});
+  return `<div class="detail-box" style="margin-top:14px" id="teacherCommentsBox" data-diagnosis-id="${Number(id)}"><h4>선생님들의 코멘트 <small style="font-weight:normal;color:#7d8791">관리자 전용</small></h4><div id="teacherCommentsList">${comments.length?comments.map(commentEntry).join(''):'<div class="admin-comment-empty">아직 등록된 선생님 코멘트가 없습니다.</div>'}</div><div class="admin-comment-new"><div class="admin-comment-author">새 코멘트 · ${esc(label)}</div><textarea id="newTeacherComment" class="admin-comment-input" placeholder="이 학생에게 남길 코멘트를 입력해주세요."></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn primary" id="saveTeacherCommentBtn">새 코멘트 등록</button></div><div id="teacherCommentStatus" style="margin-top:8px;color:#7d8791;font-size:12px"></div></div></div>`;
+}
+async function openRecord(id){
+  try{
+    const r=await jsonFetch('/api/admin/diagnoses/'+encodeURIComponent(id));
+    $('#recordModalTitle').textContent=r.student.name+' · 그림 자가진단';
+    $('#recordModalBody').innerHTML=`${r.photo?`<img class="detail-photo" src="${esc(r.photo)}" alt="학생 그림" id="detailPhoto">`:''}<div class="detail-grid" style="margin-top:15px"><div class="detail-box"><h4>기본 정보</h4><div>날짜 · ${esc(r.date||'-')}</div><div>소재 · ${esc(r.subject||'-')}</div><div>총점 · <b>${Number(r.total)||0} / 25</b></div></div><div class="detail-box"><h4>학생 기록</h4><div style="white-space:pre-wrap">${nl(r.notes)}</div><hr><h4>앞으로 개선할 점</h4><div style="white-space:pre-wrap">${nl(r.improve)}</div></div></div>${renderTeacherComments(r.id,r.teacher_note)}`;
+    $('#recordModal').classList.add('open');
+    $('#recordModal').setAttribute('aria-hidden','false');
+    $('#detailPhoto')?.addEventListener('click',()=>window.open(r.photo,'_blank'));
+    $('#saveTeacherCommentBtn').addEventListener('click',()=>saveTeacherComment(r.id,r.teacher_note));
+  }catch(e){alert('기록 상세를 불러오지 못했습니다.\n'+e.message)}
+}
+async function saveTeacherComment(id,existingValue){
+  const input=$('#newTeacherComment');
+  const status=$('#teacherCommentStatus');
+  const text=(input?.value||'').trim();
+  if(!text){alert('코멘트를 입력해주세요.');return}
+  const btn=$('#saveTeacherCommentBtn');
+  btn.disabled=true;
+  status.textContent='저장 중...';
+  try{
+    const latest=await jsonFetch('/api/admin/diagnoses/'+encodeURIComponent(id));
+    const comments=parseTeacherComments(latest.teacher_note||existingValue);
+    const u=window.__greensumAdminUser||{};
+    comments.push({id:'local-'+Date.now()+'-'+Math.random().toString(36).slice(2),admin_id:u.username||u.id||'',admin_username:u.username||'',admin_name:u.name||'관리자',comment:text,created_at:new Date().toISOString()});
+    const payload=JSON.stringify(comments);
+    await jsonFetch('/api/admin/diagnoses/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({teacher_note:payload})});
+    const saved=await jsonFetch('/api/admin/diagnoses/'+encodeURIComponent(id));
+    $('#recordModalBody').querySelector('#teacherCommentsBox').outerHTML=renderTeacherComments(id,saved.teacher_note);
+    $('#saveTeacherCommentBtn').addEventListener('click',()=>saveTeacherComment(id,saved.teacher_note));
+  }catch(e){console.error('teacher comment save',e);status.className='admin-comment-error';status.textContent='저장에 실패했습니다: '+e.message;btn.disabled=false}
+}
 function closeRecord(){$('#recordModal').classList.remove('open');$('#recordModal').setAttribute('aria-hidden','true')}
 $('#closeRecordBtn').addEventListener('click',closeRecord);$('#recordModal').addEventListener('click',e=>{if(e.target.id==='recordModal')closeRecord()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeRecord()});$('#logoutBtn').addEventListener('click',async()=>{await fetch('/api/logout',{method:'POST'});location.href='/'});init();
 })();

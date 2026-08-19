@@ -2,12 +2,7 @@ const express=require('express');
 const originalSend=express.response.send;
 
 const style=`<style id="admin-problem-bank-style">
-.pb-progress-btn{border:1px solid #d6dde5;background:#fff;padding:9px 12px;border-radius:9px;font-weight:800;cursor:pointer;color:#283a4d}
-.pb-progress-panel{margin:12px 0 0;padding:14px;border:1px solid #dce2e8;border-radius:12px;background:#fafbfc;display:none}
-.pb-progress-panel.open{display:block}
-.pb-school{border:1px solid #e1e6eb;border-radius:11px;padding:12px;margin-top:10px;background:#fff}
-.pb-school:first-child{margin-top:0}.pb-school-title{font-weight:900;margin-bottom:9px}.pb-summary{font-size:12px;color:#7d8791;margin-bottom:9px}
-.pb-prompts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px}.pb-prompt{padding:8px 9px;border-radius:8px;border:1px solid #dce2e8;font-size:12px;display:flex;justify-content:space-between;gap:8px}.pb-done{background:#e9f7ef;border-color:#b8e2c8}.pb-color{background:#fff6e6;border-color:#f2d29b}.pb-rough,.pb-detail{background:#f1f5ff;border-color:#cbd7f4}.pb-edit{background:#fff0f0;border-color:#f0bcbc}
+.student{flex-wrap:wrap}.student>div:last-child{z-index:2}.pb-progress-btn{border:1px solid #d6dde5;background:#fff;padding:9px 12px;border-radius:9px;font-weight:800;cursor:pointer;color:#283a4d}.pb-progress-panel{width:100%;margin:0;padding:14px;border:1px solid #dce2e8;border-radius:12px;background:#fafbfc;display:none}.pb-progress-panel.open{display:block}.pb-school{border:1px solid #e1e6eb;border-radius:11px;padding:12px;margin-top:10px;background:#fff}.pb-school:first-child{margin-top:0}.pb-school-title{font-weight:900;margin-bottom:9px}.pb-summary{font-size:12px;color:#7d8791;margin-bottom:9px}.pb-prompts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px}.pb-prompt{padding:8px 9px;border-radius:8px;border:1px solid #dce2e8;font-size:12px;display:flex;justify-content:space-between;gap:8px}.pb-done{background:#e9f7ef;border-color:#b8e2c8}.pb-color{background:#fff6e6;border-color:#f2d29b}.pb-rough,.pb-detail{background:#f1f5ff;border-color:#cbd7f4}.pb-edit{background:#fff0f0;border-color:#f0bcbc}
 </style>`;
 
 const script=`<script id="admin-problem-bank-script">(function(){
@@ -24,47 +19,18 @@ const prompts={
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const cls=v=>v==='완료'?'pb-done':v==='수정필요'?'pb-edit':v==='채색중'?'pb-color':v==='러프스케치'?'pb-rough':v==='디테일스케치'?'pb-detail':'';
 function panelHtml(p){
-  if(!p)return '<div class="pb-progress-panel open"><div class="muted">문제은행 기록이 없습니다.</div></div>';
+  if(!p)return '<div class="pb-progress-panel"><div class="muted">문제은행 기록이 없습니다.</div></div>';
   const selected=Array.isArray(p.schools)?p.schools.filter(Boolean):[];
-  if(!selected.length)return '<div class="pb-progress-panel open"><div class="muted">아직 선택한 문제가 없습니다.</div></div>';
-  const status=p.status&&typeof p.status==='object'?p.status:{};
-  let total=0,done=0;
-  const html=selected.map(s=>{
-    const list=prompts[s]||[];let sd=0;
-    const cards=list.map(pr=>{const v=status[s+'::'+pr]||'미진행';total++;if(v==='완료'){done++;sd++}return '<div class="pb-prompt '+cls(v)+'"><span>'+esc(pr)+'</span><b>'+esc(v)+'</b></div>'}).join('');
-    return '<div class="pb-school"><div class="pb-school-title">🏫 '+esc(s)+'</div><div class="pb-summary">완료 '+sd+' / '+list.length+'개 · 전체 진행률 '+(list.length?Math.round(sd/list.length*100):0)+'%</div><div class="pb-prompts">'+cards+'</div></div>';
-  }).join('');
-  return '<div class="pb-progress-panel open"><div class="pb-summary">전체 완료 '+done+' / '+total+'개 · 마지막 저장 '+esc(p.updated_at?new Date(p.updated_at).toLocaleString('ko-KR'):'-')+'</div>'+html+'</div>';
+  if(!selected.length)return '<div class="pb-progress-panel"><div class="muted">아직 선택한 문제가 없습니다.</div></div>';
+  const status=p.status&&typeof p.status==='object'?p.status:{};let total=0,done=0;
+  const html=selected.map(s=>{const list=prompts[s]||[];let sd=0;const cards=list.map(pr=>{const v=status[s+'::'+pr]||'미진행';total++;if(v==='완료'){done++;sd++}return '<div class="pb-prompt '+cls(v)+'"><span>'+esc(pr)+'</span><b>'+esc(v)+'</b></div>'}).join('');return '<div class="pb-school"><div class="pb-school-title">🏫 '+esc(s)+'</div><div class="pb-summary">완료 '+sd+' / '+list.length+'개 · 학교 진행률 '+(list.length?Math.round(sd/list.length*100):0)+'%</div><div class="pb-prompts">'+cards+'</div></div>'}).join('');
+  return '<div class="pb-progress-panel"><div class="pb-summary">전체 완료 '+done+' / '+total+'개 · 마지막 저장 '+esc(p.updated_at?new Date(p.updated_at).toLocaleString('ko-KR'):'-')+'</div>'+html+'</div>';
 }
-function install(){
-  document.querySelectorAll('#students .student').forEach(row=>{
-    if(row.dataset.pbInstalled==='1')return;
-    const id=Number(row.dataset.studentId);
-    if(!id)return;
-    row.dataset.pbInstalled='1';
-    const actions=row.querySelector('div:last-child');
-    if(!actions)return;
-    const btn=document.createElement('button');
-    btn.type='button';btn.className='pb-progress-btn';btn.textContent='문제은행 진도';
-    const panel=document.createElement('div');panel.innerHTML=panelHtml(progressById[id]);const p=panel.firstElementChild;
-    p.classList.remove('open');
-    btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();p.classList.toggle('open');});
-    actions.appendChild(btn);
-    row.appendChild(p);
-  });
-}
-async function load(){
-  try{const r=await fetch('/api/admin/problem-bank',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;const a=await r.json();progressById={};a.forEach(x=>progressById[Number(x.id)]=x);install();}
-  catch(e){console.warn('admin problem bank progress',e)}
-}
-function boot(){install();load();const root=document.getElementById('students');if(root&&!root.dataset.pbObserver){root.dataset.pbObserver='1';new MutationObserver(()=>install()).observe(root,{childList:true,subtree:true});}}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded,boot');else boot();
+function install(){document.querySelectorAll('#students .student').forEach(row=>{if(row.dataset.pbInstalled==='1')return;const id=Number(row.dataset.studentId);if(!id)return;row.dataset.pbInstalled='1';const actions=row.querySelector('div:last-child');if(!actions)return;const btn=document.createElement('button');btn.type='button';btn.className='pb-progress-btn';btn.textContent='문제은행 진도';const holder=document.createElement('div');holder.innerHTML=panelHtml(progressById[id]);const p=holder.firstElementChild;btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();p.classList.toggle('open')});actions.appendChild(btn);row.appendChild(p)})}
+async function load(){try{const r=await fetch('/api/admin/problem-bank',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;const a=await r.json();progressById={};a.forEach(x=>progressById[Number(x.id)]=x);install()}catch(e){console.warn('admin problem bank progress',e)}}
+function boot(){load();const root=document.getElementById('students');if(root&&!root.dataset.pbObserver){root.dataset.pbObserver='1';new MutationObserver(()=>install()).observe(root,{childList:true,subtree:true)}}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();</script>`;
 
-express.response.send=function(body){
-  if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>')){
-    body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');
-  }
-  return originalSend.call(this,body);
-};
+express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');return originalSend.call(this,body)};
 console.log('GREENSUM admin problem bank progress loaded');

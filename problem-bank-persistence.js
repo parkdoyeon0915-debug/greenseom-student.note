@@ -33,6 +33,30 @@ function install(app){
     }
   });
 
+  // 관리자용: 학생별 문제은행 학교 선택/제시물 진행상황 조회
+  app.get('/api/admin/problem-bank',async(req,res)=>{
+    try{
+      if(!req.session.user||req.session.user.role!=='admin')return res.status(403).json({error:'관리자 권한이 필요합니다.'});
+      await ensureTable();
+      const rows=(await pool.query(`
+        SELECT u.id,u.name,u.username,u.role,p.schools,p.status,p.updated_at
+        FROM users u
+        LEFT JOIN problem_bank_progress p ON p.user_id=u.id
+        WHERE u.role='student'
+        ORDER BY u.id ASC
+      `)).rows;
+      res.json(rows.map(r=>({
+        id:r.id,name:r.name,username:r.username,
+        schools:Array.isArray(r.schools)?r.schools:['','',''],
+        status:r.status&&typeof r.status==='object'?r.status:{},
+        updated_at:r.updated_at||null
+      })));
+    }catch(e){
+      console.error('admin problem bank GET',e);
+      res.status(500).json({error:'학생별 문제은행 진행상황을 불러오지 못했습니다.'});
+    }
+  });
+
   app.put('/api/problem-bank',async(req,res)=>{
     try{
       if(!req.session.user)return res.status(401).json({error:'로그인이 필요합니다.'});

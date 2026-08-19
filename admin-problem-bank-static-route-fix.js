@@ -1,5 +1,6 @@
 const fs=require('fs');
 const path=require('path');
+const express=require('express');
 let installed=false;
 
 function install(app){
@@ -14,14 +15,19 @@ function install(app){
   console.log('GREENSUM admin problem bank static route loaded');
 }
 
-// start.js가 로드될 때 이미 생성된 Express 앱에도 적용되고,
-// 이후 생성되는 앱에도 적용되도록 express.application.get을 감싼다.
-const express=require('express');
+// 앱이 /admin.html을 등록할 때도 설치
 const originalGet=express.application.get;
 express.application.get=function(pathOrSetting,...handlers){
   const result=originalGet.call(this,pathOrSetting,...handlers);
   if(pathOrSetting==='/admin.html')install(this);
   return result;
+};
+
+// 혹시 위 훅이 실행되지 않는 경우에도 서버 listen 직전에 반드시 설치
+const originalListen=express.application.listen;
+express.application.listen=function(...args){
+  install(this);
+  return originalListen.apply(this,args);
 };
 
 module.exports={install};

@@ -18,6 +18,7 @@ require('./problem-bank-static-context-final-fix.js');
 require('./problem-bank-student-storage-isolation-fix.js');
 require('./problem-bank-admin-data-final-fix.js');
 require('./problem-bank-server-authoritative-final-fix.js');
+require('./problem-bank-final-authority.js');
 
 const express=require('express');
 const originalProblemBankAdminSend=express.response.send;

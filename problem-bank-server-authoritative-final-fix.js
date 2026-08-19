@@ -46,11 +46,11 @@ if(!originalStatic.__greensumProblemBankServerAuthoritativeFinal){
       }
       function applyServer(d){
         const schools=Array.isArray(d.schools)?d.schools:['','',''];
-        nativeSet.call(localStorage,SCHOOL_KEY,JSON.stringify(schools));
+        localStorage.setItem(SCHOOL_KEY,JSON.stringify(schools));
         const n=localStorage.length,remove=[];
         for(let i=0;i<n;i++){const k=localStorage.key(i);if(k&&k.startsWith(STATUS_PREFIX))remove.push(k)}
-        remove.forEach(k=>nativeRemove.call(localStorage,k));
-        Object.keys(d.status||{}).forEach(k=>nativeSet.call(localStorage,STATUS_PREFIX+k,d.status[k]));
+        remove.forEach(k=>localStorage.removeItem(k));
+        Object.keys(d.status||{}).forEach(k=>localStorage.setItem(STATUS_PREFIX+k,d.status[k]));
         if(d.name){document.title=String(d.name)+' · 문제은행 · 그린섬';const b=document.querySelector('.brand');if(b)b.innerHTML='<b>G</b> '+String(d.name)+' · 문제은행'}
         if(typeof window.load==='function')window.load();
         if(typeof window.render==='function')window.render();

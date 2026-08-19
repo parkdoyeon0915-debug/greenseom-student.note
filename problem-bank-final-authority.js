@@ -1,69 +1,38 @@
 const express=require('express');
 
-// FINAL AUTHORITY: when an admin opens /problem-bank.html?id=STUDENT_ID,
-// the server response is the sole source of truth for the visible school/status
-// controls. This runs after the older problem-bank patches and deliberately
-// rehydrates the DOM from /api/admin/problem-bank/:id several times so stale
-// shared localStorage cannot repaint another student's page.
+// READ-ONLY FINAL CHECK:
+// Keep server data loading separate from page rendering.
+// This layer MUST NOT write localStorage, dispatch change events, call render(),
+// or send PUT requests. It only reads the target student's server record and
+// reports what the server actually contains so rendering bugs can be isolated.
 const originalSend=express.response.send;
 
 function installFinal(html){
   if(typeof html!=='string'||!html.includes('</body>'))return html;
   const script=`<script id="problem-bank-final-authority">(function(){
-(function(){
   const qs=new URLSearchParams(location.search);
   const id=Number(qs.get('id')||0);
   if(!Number.isInteger(id)||id<=0)return;
   const API='/api/admin/problem-bank/'+encodeURIComponent(id);
-  const SCHOOL_KEY='greensum_problem_bank_schools';
-  const STATUS_PREFIX='greensum_problem_bank_status_';
-  let latest=null;
 
   function note(text,ok){
     let e=document.getElementById('pbFinalAuthorityState');
-    if(!e){e=document.createElement('div');e.id='pbFinalAuthorityState';e.style='position:fixed;right:14px;bottom:14px;z-index:999999;padding:9px 12px;border:1px solid #dce2e8;border-radius:10px;background:#fff;box-shadow:0 8px 24px #0002;font:800 12px -apple-system,BlinkMacSystemFont,"Malgun Gothic",sans-serif';document.body.appendChild(e)}
-    e.textContent=text;e.style.color=ok?'#26734d':'#b42318';
-  }
-
-  function setSelectValues(schools){
-    const selects=[...document.querySelectorAll('#selects select[data-slot]')];
-    if(selects.length<3)return false;
-    selects.forEach((el,i)=>{
-      const v=Array.isArray(schools)?(schools[i]||''):'';
-      if(el.value!==v)el.value=v;
-    });
-    return true;
-  }
-
-  function setStatuses(status){
-    const map=status&&typeof status==='object'?status:{};
-    document.querySelectorAll('.status[data-school][data-prompt]').forEach(el=>{
-      const k=String(el.dataset.school)+'::'+String(el.dataset.prompt);
-      const v=map[k]||'미진행';
-      if(el.value!==v)el.value=v;
-      el.className='status '+(v==='완료'?'s-done':v==='수정필요'?'s-edit':v==='채색중'?'s-color':v==='러프스케치'?'s-rough':v==='디테일스케치'?'s-detail':'');
-    });
-  }
-
-  function repaint(){
-    // render() rebuilds the tables from the page's selected[] variable.
-    // The select values are authoritative first; dispatching change updates
-    // selected[] and rebuilds the visible school tables.
-    const selects=[...document.querySelectorAll('#selects select[data-slot]')];
-    if(selects.length<3)return false;
-    let changed=false;
-    const schools=latest&&Array.isArray(latest.schools)?latest.schools:['','',''];
-    selects.forEach((el,i)=>{
-      const v=schools[i]||'';
-      if(el.value!==v){el.value=v;changed=true;el.dispatchEvent(new Event('change',{bubbles:true}));}
-    });
-    if(!changed){
-      if(typeof window.renderSchools==='function')window.renderSchools();
-      else if(typeof window.render==='function')window.render();
+    if(!e){
+      e=document.createElement('div');
+      e.id='pbFinalAuthorityState';
+      e.style='position:fixed;right:14px;bottom:14px;z-index:999999;padding:9px 12px;border:1px solid #dce2e8;border-radius:10px;background:#fff;box-shadow:0 8px 24px #0002;font:800 12px -apple-system,BlinkMacSystemFont,"Malgun Gothic",sans-serif';
+      document.body.appendChild(e);
     }
-    setStatuses(latest.status||{});
-    note('✓ 학생 '+id+' 서버 저장값 표시 중',true);
-    return true;
+    e.textContent=text;
+    e.style.color=ok?'#26734d':'#b42318';
+  }
+
+  function describe(d){
+    const schools=Array.isArray(d.schools)?d.schools.filter(Boolean):[];
+    const status=d.status&&typeof d.status==='object'?d.status:{};
+    const statusCount=Object.keys(status).length;
+    const schoolText=schools.length?schools.join(' / '):'학교 선택 없음';
+    note('서버 확인 · 학생 '+id+' · '+schoolText+' · 진행 '+statusCount+'개',true);
   }
 
   async function load(){
@@ -71,26 +40,16 @@ function installFinal(html){
       const r=await fetch(API,{credentials:'same-origin',cache:'no-store'});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(d.error||('HTTP '+r.status));
-      latest=d;
-      document.title=String(d.name||('학생 '+id))+' · 문제은행 · 그린섬';
-      repaint();
-      // A delayed repaint defeats older scripts that finish loading later.
-      setTimeout(repaint,150);
-      setTimeout(repaint,500);
-      setTimeout(repaint,1200);
-      setTimeout(repaint,2500);
+      // IMPORTANT: read only. Do not mutate page state or storage here.
+      describe(d);
+      console.log('[problem-bank read-only] server data', {id:id, schools:d.schools||[], status:d.status||{}});
     }catch(e){
-      console.warn('problem bank final authority',e);
-      note('문제은행 서버 조회 실패',false);
+      console.warn('problem bank read-only final check',e);
+      note('서버 데이터 조회 실패',false);
     }
   }
 
-  function boot(){
-    note('학생 '+id+' 서버 저장값 확인 중…',false);
-    load();
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
-})();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',load);else load();
 })();</script>`;
   return html.replace('</body>',script+'</body>');
 }
@@ -99,4 +58,4 @@ express.response.send=function(body){
   if(this.req&&this.req.path==='/problem-bank.html'&&typeof body==='string')body=installFinal(body);
   return originalSend.call(this,body);
 };
-console.log('GREENSUM problem bank FINAL AUTHORITY loaded');
+console.log('GREENSUM problem bank FINAL AUTHORITY switched to READ-ONLY verification');

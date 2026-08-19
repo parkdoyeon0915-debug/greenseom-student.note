@@ -20,6 +20,7 @@ require('./problem-bank-admin-data-final-fix.js');
 require('./problem-bank-server-authoritative-final-fix.js');
 require('./problem-bank-final-authority.js');
 require('./admin-comment-fix.js');
+require('./student-edit-ui-fix.js');
 
 const express=require('express');
 const originalProblemBankAdminSend=express.response.send;

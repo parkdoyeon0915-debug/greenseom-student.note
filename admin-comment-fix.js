@@ -34,8 +34,30 @@ async function fixCounts(){
   }));
 }
 async function patchTeacher(sec,id){if(sec.dataset.commentFix==='1')return;sec.dataset.commentFix='1';try{const[u,comments]=await Promise.all([me(),getComments(id)]);sec.innerHTML='<h4 style="margin:0 0 12px">선생님들의 코멘트 <span class="muted">· 관리자 전용</span></h4><div class="admin-comment-list">'+(comments.length?comments.map(commentBox).join(''):'<div class="admin-comment-empty">아직 등록된 선생님 코멘트가 없습니다.</div>')+'</div><div class="admin-comment-new"><div class="admin-comment-author">새 코멘트 · '+esc(teacherLabel({admin_id:u?.username||u?.id,admin_name:u?.name}))+'</div><textarea class="admin-comment-input" placeholder="이 학생에게 남길 코멘트를 입력해주세요."></textarea><div class="actions"><button class="btn primary admin-comment-save">새 코멘트 등록</button></div></div>';sec.querySelector('.admin-comment-save').onclick=async()=>{const text=sec.querySelector('.admin-comment-input').value.trim();if(!text)return alert('코멘트를 입력해주세요.');try{await saveComment(id,text);sec.dataset.commentFix='';await patchTeacher(sec,id);alert('코멘트가 저장되었습니다.')}catch(e){console.error('teacher comment save',e);alert(e.message||'코멘트 저장에 실패했습니다.')}}}catch(e){console.error('admin comment fix',e);sec.dataset.commentFix='';const msg=document.createElement('div');msg.className='admin-comment-empty';msg.textContent='선생님 코멘트를 불러오지 못했습니다. '+(e.message||'');sec.innerHTML=msg}}
+async function kickStudentFixed(id,name){
+  if(!confirm(name+' 학생을 강퇴할까요?\n\n강퇴하면 해당 계정의 로그인이 차단됩니다. 기존 기록은 보존됩니다.'))return;
+  try{
+    const r=await fetch('/api/admin/students/'+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin',cache:'no-store'});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw Error(j.error||'강퇴에 실패했습니다.');
+    const row=document.querySelector('#students .student[data-student-id="'+Number(id)+'"]');
+    if(row)row.remove();
+    document.querySelector('#detail').innerHTML='<div class="muted">학생을 선택해주세요.</div>';
+    alert(name+' 학생을 강퇴했습니다.\n\n해당 계정의 로그인은 차단되고 기존 기록은 보존됩니다.');
+  }catch(e){
+    console.error('admin kick student',e);
+    alert(e.message||'강퇴에 실패했습니다.');
+  }
+}
 function patchAll(){document.querySelectorAll('.teacher').forEach(sec=>{const ta=sec.querySelector('textarea[id^="teacher_"]');if(ta)patchTeacher(sec,Number(ta.id.replace('teacher_','')))});document.querySelectorAll('.photo img,.patternHero img,.patternImgs img').forEach(img=>{if(img.dataset.photoFix)return;img.dataset.photoFix='1';img.addEventListener('error',()=>{img.style.display='none';const p=img.parentElement;if(p&&!p.querySelector('.photo-error')){const d=document.createElement('span');d.className='photo-error muted';d.textContent='사진을 불러오지 못했습니다.';p.appendChild(d)}})})}
-function boot(){fixCounts();patchAll();const d=document.getElementById('detail');const s=document.getElementById('students');if(d&&!d.dataset.commentObserver){d.dataset.commentObserver='1';new MutationObserver(()=>patchAll()).observe(d,{childList:true,subtree:true)}if(s&&!s.dataset.countObserver){s.dataset.countObserver='1';new MutationObserver(()=>fixCounts()).observe(s,{childList:true,subtree:true})}}
+function boot(){
+  window.kickStudent=kickStudentFixed;
+  fixCounts();patchAll();
+  const d=document.getElementById('detail');
+  const s=document.getElementById('students');
+  if(d&&!d.dataset.commentObserver){d.dataset.commentObserver='1';new MutationObserver(()=>patchAll()).observe(d,{childList:true,subtree:true})}
+  if(s&&!s.dataset.countObserver){s.dataset.countObserver='1';new MutationObserver(()=>fixCounts()).observe(s,{childList:true,subtree:true})}
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();</script>`;
 express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');return originalSend.call(this,body)};

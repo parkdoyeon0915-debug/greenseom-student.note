@@ -139,4 +139,23 @@ app.delete('/api/superadmin/teachers/:id',superAdmin,async(req,res)=>{
   }
 });
 
+// Student kick: suspend the account without deleting any student records.
+// Login already rejects the `suspended` role, so the student can no longer sign in.
+app.delete('/api/admin/students/:id',async(req,res)=>{
+  try{
+    if(!req.session.user||req.session.user.role!=='admin')return res.status(403).json({error:'관리자 권한이 필요합니다.'});
+    const id=Number(req.params.id);
+    if(!Number.isInteger(id)||id<=0)return res.status(400).json({error:'잘못된 학생 ID입니다.'});
+    const target=(await q("SELECT id,username,name,role FROM users WHERE id=$1",[id])).rows[0];
+    if(!target)return res.status(404).json({error:'학생을 찾을 수 없습니다.'});
+    if(target.username==='doyean7'||target.role==='admin')return res.status(403).json({error:'관리자 계정은 강퇴할 수 없습니다.'});
+    if(target.role==='suspended')return res.json({ok:true,name:target.name,alreadySuspended:true});
+    await q("UPDATE users SET role='suspended' WHERE id=$1",[id]);
+    res.json({ok:true,name:target.name,suspended:true});
+  }catch(e){
+    console.error('admin kick student',e);
+    res.status(500).json({error:'학생 강퇴 처리 중 오류가 발생했습니다.'});
+  }
+});
+
 console.log('GREENSUM superadmin controls loaded: doyean7');

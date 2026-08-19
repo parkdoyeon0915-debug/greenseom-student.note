@@ -1,6 +1,6 @@
 const express=require('express');
 const originalSend=express.response.send;
-const script=`<script id="admin-comment-runtime-fix"><(function(){
+const script=`<script id="admin-comment-runtime-fix">(function(){
 function boot(){
   const body=document.getElementById('recordModalBody');
   if(!body)return;
@@ -23,7 +23,7 @@ function parse(v){
   try{const a=JSON.parse(v);return Array.isArray(a)?a.filter(x=>x&&String(x.comment||'').trim()):[]}
   catch(e){return String(v).trim()?[{id:'legacy',admin_id:'legacy',admin_name:'선생님',comment:String(v),created_at:null}]:[]}
 }
-function esc(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
+function esc(v){return String(v??'').replace(/[&<>\\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":'&#39;'}[c]))}
 function label(c){const id=String(c?.admin_id||c?.admin_username||'').toLowerCase();if(id==='doyean7')return'도연T';let n=String(c?.admin_name||'선생님').trim();if(!n||n==='관리자'||n==='선생님')return'선생님';return /T$/.test(n)?n:n+'T'}
 function render(c){return '<div class="admin-comment-entry"><div class="admin-comment-author">'+esc(label(c))+'</div><div class="admin-comment-text">'+esc(c.comment)+'</div>'+(c.created_at?'<div class="admin-comment-date">'+esc(new Date(c.created_at).toLocaleString('ko-KR'))+'</div>':'')+'</div>'}
 async function patch(){

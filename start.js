@@ -95,3 +95,29 @@ new MutationObserver(boot).observe(document.body,{childList:true,subtree:true});
 })();</script>`;
 const previousSend=express.response.send;
 express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin-problem-bank.html'&&body.includes('</body>'))body=body.replace('</head>',finalProblemBankAdminStyle+'</head>').replace('</body>',finalProblemBankAdminScript+'</body>');return previousSend.call(this,body)};
+
+// 자가진단 수정 저장 서버 라우트를 최종적으로 보강합니다.
+// 기존 server.js의 PUT 라우트에는 completion이 중복되어 14개 파라미터가 전달되는 버그가 있습니다.
+// 여기서는 app.put 자체를 거치지 않고 this.route(path).put()으로 직접 등록해 기존 monkey-patch와 충돌하지 않게 합니다.
+const baseMulter=require('multer');
+const diagnosisFinalUpload=baseMulter({storage:baseMulter.memoryStorage(),limits:{fileSize:10*1024*1024},fileFilter:(req,file,cb)=>cb(null,/^image\/(jpeg|png|webp|heic|heif)$/.test(file.mimetype))});
+const {Pool:DiagnosisFinalPool}=require('pg');
+const diagnosisFinalPool=new DiagnosisFinalPool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},max:3,idleTimeoutMillis:30000});
+const diagnosisFinalPutFallback=express.application.put;
+express.application.put=function(path,...handlers){
+  if(path==='/api/diagnoses/:id'){
+    return this.route(path).put(diagnosisFinalUpload.single('photo'),async(req,res)=>{
+      try{
+        if(!req.session.user)return res.status(401).json({error:'로그인이 필요합니다.'});
+        const old=(await diagnosisFinalPool.query('SELECT * FROM diagnoses WHERE id=$1 AND user_id=$2',[req.params.id,req.session.user.id])).rows[0];
+        if(!old)return res.status(404).json({error:'기록을 찾을 수 없습니다.'});
+        const b=req.body||{};
+        const f=['problem_analysis','form_score','completion','expression','composition'].map(k=>Math.max(0,Math.min(5,Number(b[k])||0)));
+        const x=(await diagnosisFinalPool.query('UPDATE diagnoses SET date=$1,subject=$2,photo_data=$3,photo_mime=$4,problem_analysis=$5,form_score=$6,completion=$7,expression=$8,composition=$9,notes=$10,improve=$11 WHERE id=$12 AND user_id=$13 RETURNING *',[b.date||old.date,b.subject||'',req.file?.buffer||old.photo_data,req.file?.mimetype||old.photo_mime,...f,b.notes||'',b.improve||'',req.params.id,req.session.user.id])).rows[0];
+        const total=f.reduce((a,v)=>a+v,0);
+        res.json({...x,total,photo:x.photo_data?`/api/files/diagnoses/${x.id}`:null});
+      }catch(e){console.error('FINAL PUT /api/diagnoses/:id',e);res.status(500).json({error:e.message||'자가진단 수정 저장에 실패했습니다.'});}
+    });
+  }
+  return diagnosisFinalPutFallback.call(this,path,...handlers);
+};

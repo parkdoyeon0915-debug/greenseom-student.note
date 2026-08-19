@@ -1,59 +1,17 @@
-const fs = require('fs');
-const path = require('path');
-const originalReadFileSync = fs.readFileSync.bind(fs);
-
-fs.readFileSync = function(filePath, ...args) {
-  let html = originalReadFileSync(filePath, ...args);
-  if (String(filePath).endsWith(path.join('public', 'admin.html')) && typeof html === 'string') {
-    const patch = `<script>
+// 관리자별 코멘트 UI를 admin.html 응답에 직접 적용합니다.
+// 학생/패턴 데이터는 변경하지 않습니다.
+const express=require('express');
+const originalSend=express.response.send;
+const patch=`<style id="teacher-comments-style">
+.teacher-comments{border:2px solid #283a4d;border-radius:12px;padding:14px;margin-top:14px;background:#fafbfc}.teacher-comments h4{margin:0 0 10px}.teacher-comments small{font-weight:400;color:#7d8791}.teacher-comment{border:1px solid #e1e6eb;border-radius:10px;background:#fff;padding:12px;margin-top:8px}.teacher-comment-head{display:flex;justify-content:space-between}.teacher-comment-text{white-space:pre-wrap;line-height:1.6;margin-top:6px}.teacher-comment-new{border-top:1px solid #e1e6eb;margin-top:14px;padding-top:14px}.teacher-comment-new textarea{display:block;width:100%;min-height:90px;margin-top:8px;border:1px solid #d6dde5;border-radius:10px;padding:12px;font:inherit;resize:vertical}.teacher-comment-actions{display:flex;justify-content:flex-end;margin-top:10px}
+</style><script id="teacher-comments-script">
 (function(){
-  function install(){
-    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    async function getMe(){ try { return (await fetch('/api/me')).user || {}; } catch(e) { return {}; } }
-    function parse(v){
-      if(!v) return [];
-      try { const a=JSON.parse(v); return Array.isArray(a) ? a.filter(x=>x && String(x.comment||'').trim()) : []; }
-      catch(e){ return [{admin_name:'선생님',comment:String(v),created_at:null}]; }
-    }
-    function label(c,me){
-      const id=String(c.admin_username||c.admin_id||'').toLowerCase();
-      if(id==='doyean7') return '도연T';
-      let n=String(c.admin_name||'선생님').trim();
-      if(me.username && id===String(me.username).toLowerCase() && me.name) n=me.name;
-      return /T$/.test(n) ? n : n+'T';
-    }
-    async function openNew(kind,id){
-      const r=await (await fetch('/api/admin/diagnoses/'+encodeURIComponent(id))).json();
-      if(r.error) return alert(r.error);
-      const me=await getMe();
-      const comments=parse(r.teacher_note);
-      const entries=comments.length ? comments.map(c=>'<div style="border:1px solid #e1e6eb;border-radius:10px;padding:12px;margin-top:8px"><b>'+esc(label(c,me))+'</b><div style="white-space:pre-wrap;margin-top:6px">'+esc(c.comment)+'</div>'+(c.created_at?'<small style="color:#7d8791">'+esc(new Date(c.created_at).toLocaleString('ko-KR'))+'</small>':'')+'</div>').join('') : '<div style="color:#7d8791">아직 등록된 선생님 코멘트가 없습니다.</div>';
-      const body=document.getElementById('recordModalBody');
-      const title=document.getElementById('recordModalTitle');
-      const modal=document.getElementById('recordModal');
-      if(!body||!title||!modal) return;
-      title.textContent=r.student.name+' · 그림 자가진단';
-      body.innerHTML=(r.photo?'<img class="detail-photo" src="'+esc(r.photo)+'" alt="학생 그림">':'')+'<div class="detail-grid" style="margin-top:15px"><div class="detail-box"><h4>기본 정보</h4><div>날짜 · '+esc(r.date||'-')+'</div><div>소재 · '+esc(r.subject||'-')+'</div><div>총점 · <b>'+Number(r.total||0)+' / 25</b></div></div><div class="detail-box"><h4>학생 기록</h4><div style="white-space:pre-wrap">'+esc(r.notes||'기록 없음')+'</div><hr><h4>앞으로 개선할 점</h4><div style="white-space:pre-wrap">'+esc(r.improve||'기록 없음')+'</div></div></div><div class="detail-box" style="margin-top:14px"><h4>선생님들의 코멘트 <small style="font-weight:normal;color:#7d8791">· 관리자 전용</small></h4><div id="teacherCommentsList">'+entries+'</div><div style="margin-top:14px;padding-top:14px;border-top:1px solid #e1e6eb"><b>새 코멘트 · '+esc(me.name ? (/T$/.test(me.name)?me.name:me.name+'T') : '선생님')+'</b><textarea id="newTeacherComment" class="admin-note" placeholder="이 학생에게 남길 코멘트를 입력해주세요."></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn primary" id="saveTeacherCommentBtn">새 코멘트 등록</button></div></div></div>';
-      modal.classList.add('open');
-      document.getElementById('saveTeacherCommentBtn').onclick=async function(){
-        const text=document.getElementById('newTeacherComment').value.trim();
-        if(!text) return alert('코멘트를 입력해주세요.');
-        const latest=await (await fetch('/api/admin/diagnoses/'+encodeURIComponent(id))).json();
-        const arr=parse(latest.teacher_note);
-        arr.push({id:'comment-'+Date.now(),admin_id:me.id||'',admin_username:me.username||'',admin_name:me.name||'관리자',comment:text,created_at:new Date().toISOString()});
-        const q=await fetch('/api/admin/diagnoses/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({teacher_note:JSON.stringify(arr)})});
-        const j=await q.json();
-        if(!q.ok) return alert(j.error||'저장에 실패했습니다.');
-        openNew(kind,id);
-      };
-    }
-    window.openRecord=openNew;
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0),{once:true});
-  else setTimeout(install,0);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function parse(v){if(!v)return[];try{const x=JSON.parse(v);if(Array.isArray(x))return x.filter(c=>c&&String(c.comment||'').trim());if(x&&x.comment)return[x]}catch(e){return[{admin_username:'',admin_name:'선생님',comment:String(v)}]}return[]}
+function label(c,me){const id=String(c?.admin_username||'').toLowerCase();if(id==='doyean7')return'도연T';if(me?.username&&id===String(me.username).toLowerCase())return /T$/.test(me.name||'')?me.name:((me.name||'선생님')+'T');let n=String(c?.admin_name||'선생님').trim();if(!n||n==='관리자')n='선생님';return/T$/.test(n)?n:n+'T'}
+async function me(){try{return((await(await fetch('/api/me',{credentials:'same-origin'})).json()).user)||{}}catch(e){return{}}}
+async function openRecordFixed(kind,id){try{const r=await(await fetch('/api/admin/diagnoses/'+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store'})).json();if(r.error)return alert(r.error);const u=await me(),cs=parse(r.teacher_note),mine=label({admin_username:u.username,admin_id:u.id,admin_name:u.name},u);const list=cs.length?cs.map(c=>'<div class="teacher-comment"><div class="teacher-comment-head"><b>'+esc(label(c,u))+'</b>'+(c.created_at?'<small>'+esc(new Date(c.created_at).toLocaleString('ko-KR'))+'</small>':'')+'</div><div class="teacher-comment-text">'+esc(c.comment)+'</div></div>').join(''):'<div class="muted">아직 등록된 선생님 코멘트가 없습니다.</div>';const modal=document.getElementById('recordModal'),title=document.getElementById('recordModalTitle'),body=document.getElementById('recordModalBody');if(!modal||!title||!body)return;title.textContent=r.student.name+' · 그림 자가진단';body.innerHTML=(r.photo?'<img class="detail-photo" src="'+esc(r.photo)+'" alt="학생 그림">':'')+'<div class="detail-grid" style="margin-top:15px"><div class="detail-box"><h4>기본 정보</h4><div>날짜 · '+esc(r.date||'-')+'</div><div>소재 · '+esc(r.subject||'-')+'</div><div>총점 · <b>'+(Number(r.total)||0)+' / 25</b></div></div><div class="detail-box"><h4>학생 기록</h4><div style="white-space:pre-wrap">'+esc(r.notes||'기록 없음')+'</div><hr><h4>앞으로 개선할 점</h4><div style="white-space:pre-wrap">'+esc(r.improve||'기록 없음')+'</div></div></div><div class="teacher-comments"><h4>선생님들의 코멘트 <small>· 관리자 전용</small></h4><div>'+list+'</div><div class="teacher-comment-new"><b>새 코멘트 · '+esc(mine)+'</b><textarea id="teacherCommentInput" placeholder="이 학생에게 남길 코멘트를 입력해주세요."></textarea><div class="teacher-comment-actions"><button class="btn primary" id="teacherCommentSave">새 코멘트 등록</button></div></div></div>';modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.getElementById('teacherCommentSave').onclick=async function(){const text=document.getElementById('teacherCommentInput').value.trim();if(!text)return alert('코멘트를 입력해주세요.');this.disabled=true;try{const latest=await(await fetch('/api/admin/diagnoses/'+id,{cache:'no-store'})).json(),arr=parse(latest.teacher_note);arr.push({id:'comment-'+Date.now(),admin_id:u.id||'',admin_username:u.username||'',admin_name:u.name||'관리자',comment:text,created_at:new Date().toISOString()});const q=await fetch('/api/admin/diagnoses/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({teacher_note:JSON.stringify(arr)})});const j=await q.json().catch(()=>({}));if(!q.ok)throw Error(j.error||'저장에 실패했습니다.');openRecordFixed(kind,id)}catch(e){this.disabled=false;alert(e.message)}}}catch(e){alert('기록 상세를 불러오지 못했습니다.\\n'+e.message)}}
+window.openRecord=openRecordFixed;
 })();
 </script>`;
-    html = html.replace('</body>', patch + '</body>');
-  }
-  return html;
-};
+express.response.send=function(body){if(typeof body==='string'&&this.req&&this.req.path==='/admin.html'&&body.includes('</body>'))body=body.replace('</body>',patch+'</body>');return originalSend.call(this,body)};

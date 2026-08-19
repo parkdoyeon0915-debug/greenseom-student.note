@@ -9,15 +9,11 @@ const patch=`<style id="student-edit-ui-style">
 function editDiagFromModal(id,modal){
   if(!id)return;
   if(modal)modal.style.display='none';
-  // 먼저 자가진단 페이지로 이동한 뒤 기존 편집 함수를 실행합니다.
-  // 이렇게 하면 상세 모달을 만든 별도 클릭 이벤트와 충돌하지 않습니다.
-  setTimeout(function(){
-    if(typeof go==='function')go('diagnosis');
-    setTimeout(function(){
-      if(typeof loadDiag==='function')loadDiag(id);
-      if(typeof window.scrollTo==='function')window.scrollTo({top:0,behavior:'smooth'});
-    },30);
-  },0);
+  // 기존 날짜별 기록 카드와 동일한 순서로 실행합니다.
+  // loadDiag가 먼저 diagId를 설정한 뒤 go가 자가진단 화면을 엽니다.
+  // 강제 scrollTo/지연 호출을 사용하지 않아 화면이 불필요하게 최상단으로 튀지 않습니다.
+  if(typeof loadDiag==='function')loadDiag(id);
+  if(typeof go==='function')go('diagnosis');
 }
 function addDiagActions(){
   const list=document.getElementById('diagList');

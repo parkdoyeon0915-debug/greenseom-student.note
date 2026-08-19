@@ -88,10 +88,6 @@ function install(app){
     }
   });
 
-  // IMPORTANT: admin-target pages are opened with /problem-bank.html?id=STUDENT_ID.
-  // Their browser session is the admin session, so the normal PUT /api/problem-bank
-  // would otherwise save into the admin's own user_id. This route explicitly targets
-  // the student ID from the URL and is the only write path used by admin-target pages.
   app.put('/api/admin/problem-bank/:id',async(req,res)=>{
     try{
       if(!req.session.user||req.session.user.role!=='admin')return res.status(403).json({error:'관리자 권한이 필요합니다.',code:'PB_ADMIN_PUT_AUTH'});
@@ -137,30 +133,85 @@ express.application.listen=function(...args){
   });
 };
 
+// Client state is isolated by the student id in the URL (admin target page)
+// or by the authenticated student id. Server save/load is explicit and never
+// calls the page's renderer until the scoped local state has been replaced.
 const originalSend=express.response.send;
 express.response.send=function(body){
   if(typeof body==='string'&&this.req&&this.req.path==='/problem-bank.html'&&body.includes('</body>')){
-    const script=`<script id="problem-bank-server-sync-v7">(function(){
-let syncing=false,timer=null;
+    const script=`<script id="problem-bank-per-student-sync">(function(){
+const params=new URLSearchParams(location.search);
+const urlId=Number(params.get('id')||0);
+const adminTarget=Number.isInteger(urlId)&&urlId>0;
+let targetId=adminTarget?urlId:0;
+let api=adminTarget?('/api/admin/problem-bank/'+encodeURIComponent(urlId)):'/api/problem-bank';
 const SCHOOL_KEY='greensum_problem_bank_schools';
 const STATUS_PREFIX='greensum_problem_bank_status_';
-const params=new URLSearchParams(location.search);
-const targetId=Number(params.get('id')||0);
-const isAdminTarget=Number.isInteger(targetId)&&targetId>0;
-const apiBase=isAdminTarget?('/api/admin/problem-bank/'+encodeURIComponent(targetId)):'/api/problem-bank';
-function state(t,ok){let e=document.getElementById('problemBankSaveState');if(!e){e=document.createElement('div');e.id='problemBankSaveState';e.style='position:fixed;right:14px;bottom:14px;z-index:9999;padding:9px 12px;border-radius:10px;background:#fff;border:1px solid #dce2e8;box-shadow:0 8px 24px #00000012;font-size:12px;font-weight:800';document.body.appendChild(e)}e.textContent=t;e.style.color=ok?'#26734d':'#7d8791';}
-function schools(){try{const v=JSON.parse(localStorage.getItem(SCHOOL_KEY)||'[]');return Array.isArray(v)&&v.length===3?v:['','',''];}catch(e){return ['','',''];}}
-function statuses(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith(STATUS_PREFIX))continue;const v=localStorage.getItem(k)||'';if(v&&v!=='미진행')out[k.slice(STATUS_PREFIX.length)]=v;}document.querySelectorAll('.status[data-school][data-prompt]').forEach(el=>{const k=el.dataset.school+'::'+el.dataset.prompt;const v=el.value||'미진행';if(v&&v!=='미진행')out[k]=v;});return out;}
-async function sync(){if(syncing)return;syncing=true;try{const payload={schools:schools(),status:statuses()};const r=await fetch(apiBase,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.error||'save');}state('✓ 학생별 문제은행 저장됨',true);return await r.json();}catch(e){console.warn('problem bank sync',e);state('저장 실패 · 다시 시도해주세요',false);return null;}finally{syncing=false;}}
-function schedule(){clearTimeout(timer);timer=setTimeout(sync,150);state('저장 중…',false);}
-function bind(){document.querySelectorAll('.status').forEach(e=>{if(e.dataset.serverBound)return;e.dataset.serverBound='1';e.addEventListener('change',()=>{localStorage.setItem(STATUS_PREFIX+e.dataset.school+'::'+e.dataset.prompt,e.value);schedule();});});if(typeof window.saveSchools==='function'&&!window.saveSchools.__serverBound){const old=window.saveSchools;const wrapped=function(){const r=old.apply(this,arguments);schedule();return r};wrapped.__serverBound=true;window.saveSchools=wrapped;}}
-async function loadServer(){try{const r=await fetch(apiBase,{credentials:'same-origin',cache:'no-store'});if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.error||'load');}const d=await r.json();localStorage.setItem(SCHOOL_KEY,JSON.stringify(Array.isArray(d.schools)?d.schools:['','','']));for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(STATUS_PREFIX))localStorage.removeItem(k);}Object.keys(d.status||{}).forEach(k=>localStorage.setItem(STATUS_PREFIX+k,d.status[k]));if(isAdminTarget){document.title=(d.name||'학생')+' · 문제은행 · 그린섬';const brand=document.querySelector('.brand');if(brand)brand.innerHTML='<b>G</b> '+String(d.name||'학생')+' · 문제은행';}if(typeof window.load==='function')window.load();if(typeof window.render==='function')window.render();if(typeof window.renderGallery==='function')window.renderGallery();bind();state(d.updated_at?'✓ 학생별 저장내용 불러옴':'✓ 학생별 문제은행 자동 저장 준비',true);}catch(e){console.warn('problem bank load',e);bind();state('문제은행 연결 실패',false);}}
-function boot(){setTimeout(loadServer,80);}
+const PHOTO_KEY='greensum_problem_bank_photos';
+const nativeGet=Storage.prototype.getItem;
+const nativeSet=Storage.prototype.setItem;
+const nativeRemove=Storage.prototype.removeItem;
+const suffixBase='__student_';
+let scopedSuffix=suffixBase+(adminTarget?urlId:'session');
+const scopedKey=k=>String(k||'')+scopedSuffix;
+function isPB(k){return k===SCHOOL_KEY||k===PHOTO_KEY||String(k||'').startsWith(STATUS_PREFIX)}
+Storage.prototype.getItem=function(k){return isPB(k)?nativeGet.call(this,scopedKey(k)):nativeGet.call(this,k)};
+Storage.prototype.setItem=function(k,v){return isPB(k)?nativeSet.call(this,scopedKey(k),v):nativeSet.call(this,k,v)};
+Storage.prototype.removeItem=function(k){return isPB(k)?nativeRemove.call(this,scopedKey(k)):nativeRemove.call(this,k)};
+function notify(text,ok){let e=document.getElementById('problemBankServerState');if(!e){e=document.createElement('span');e.id='problemBankServerState';e.style='font-size:12px;font-weight:800;margin-left:auto;align-self:center';const bar=document.getElementById('problemBankServerControls');if(bar)bar.appendChild(e)}e.textContent=text;e.style.color=ok?'#26734d':'#7d8791';}
+function schoolsFromDom(){const out=['','',''];document.querySelectorAll('#selects select[data-slot]').forEach(el=>{const i=Number(el.dataset.slot);if(i>=0&&i<3)out[i]=el.value||''});return out}
+function statusFromDom(){const out={};document.querySelectorAll('.status[data-school][data-prompt]').forEach(el=>{const v=el.value||'미진행';if(v&&v!=='미진행')out[String(el.dataset.school)+'::'+String(el.dataset.prompt)]=v});return out}
+function setServerData(d){
+  nativeSet.call(localStorage,scopedKey(SCHOOL_KEY),JSON.stringify(Array.isArray(d.schools)?d.schools:['','','']));
+  const remove=[];
+  const n=localStorage.length;
+  for(let i=0;i<n;i++){const k=localStorage.key(i);if(k&&k.startsWith(STATUS_PREFIX)&&k.endsWith(scopedSuffix))remove.push(k)}
+  remove.forEach(k=>nativeRemove.call(localStorage,k));
+  Object.entries(d.status||{}).forEach(([k,v])=>nativeSet.call(localStorage,scopedKey(STATUS_PREFIX+k),v));
+  if(typeof window.load==='function')window.load();
+  if(typeof window.render==='function')window.render();
+  if(typeof window.renderGallery==='function')window.renderGallery();
+}
+async function serverLoad(){
+  notify('서버 내용 불러오는 중…',false);
+  try{
+    const r=await fetch(api,{credentials:'same-origin',cache:'no-store'});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw Error(d.error||('HTTP '+r.status));
+    if(!adminTarget&&d.id)targetId=Number(d.id)||0;
+    setServerData(d);
+    if(d.name){document.title=String(d.name)+' · 문제은행 · 그린섬';const b=document.querySelector('.brand');if(b)b.innerHTML='<b>G</b> '+String(d.name||'학생')+' · 문제은행';}
+    notify('✓ 서버 내용 불러옴',true);
+  }catch(e){console.warn('problem bank server load',e);notify('서버 불러오기 실패',false)}
+}
+async function serverSave(){
+  notify('서버에 저장 중…',false);
+  try{
+    const payload={schools:schoolsFromDom(),status:statusFromDom()};
+    const r=await fetch(api,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify(payload)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw Error(d.error||('HTTP '+r.status));
+    setServerData(d);
+    notify('✓ 이 학생 ID에 서버 저장됨',true);
+  }catch(e){console.warn('problem bank server save',e);notify('서버 저장 실패',false)}
+}
+function addControls(){
+  if(document.getElementById('problemBankServerControls'))return;
+  const hero=document.querySelector('.hero');
+  if(!hero)return;
+  const bar=document.createElement('div');
+  bar.id='problemBankServerControls';
+  bar.style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid #e4e8ec';
+  const loadBtn=document.createElement('button');loadBtn.className='btn';loadBtn.textContent='☁ 서버 불러오기';loadBtn.onclick=serverLoad;
+  const saveBtn=document.createElement('button');saveBtn.className='btn primary';saveBtn.textContent='☁ 서버 저장';saveBtn.onclick=serverSave;
+  bar.appendChild(loadBtn);bar.appendChild(saveBtn);hero.appendChild(bar);
+}
+function boot(){addControls();setTimeout(serverLoad,80)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
-new MutationObserver(bind).observe(document.body,{childList:true,subtree:true});
+new MutationObserver(addControls).observe(document.documentElement,{childList:true,subtree:true});
 })();</script>`;
     body=body.replace('</body>',script+'</body>');
   }
   return originalSend.call(this,body);
 };
-console.log('GREENSUM problem bank persistence v7 loaded');
+console.log('GREENSUM problem bank per-student server sync loaded');

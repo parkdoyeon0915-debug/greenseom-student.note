@@ -18,6 +18,14 @@ fs.readFileSync=function(file,options){
   if(typeof file==='string'&&typeof content==='string'&&file.endsWith('/public/index.html')&&!content.includes('id="greensum-nav-fix"')){
     content=content.replace('</head>',style+'</head>');
   }
+  // When returning from the standalone problem-bank page, always load the
+  // student's home page fresh instead of using history.back(). history.back()
+  // can restore the pre-login page snapshot and show the login screen again.
+  if(typeof file==='string'&&typeof content==='string'&&file.endsWith('/public/problem-bank.html')){
+    const old="document.querySelector('#backHome').onclick=goHome;";
+    const fixed="document.querySelector('#backHome').onclick=function(){location.href='/';};";
+    if(content.includes(old)) content=content.replace(old,fixed);
+  }
   return content;
 };
 

@@ -31,10 +31,7 @@ function boot(){mount();setTimeout(loadServer,100)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 new MutationObserver(mount).observe(document.documentElement,{childList:true,subtree:true});
 })();</script>`;
-  function inject(body){
-    if(typeof body!=='string'||body.includes('id="problem-bank-final-controls"'))return body;
-    return body.includes('</body>')?body.replace('</body>',script+'</body>'):body;
-  }
+  function inject(body){if(typeof body!=='string'||body.includes('id="problem-bank-final-controls"'))return body;return body.includes('</body>')?body.replace('</body>',script+'</body>'):body}
   const originalSend=express.response.send;
   express.response.send=function(body){if(this.req&&this.req.path==='/problem-bank.html')body=inject(typeof body==='string'?body:Buffer.isBuffer(body)?body.toString('utf8'):body);return originalSend.call(this,body)};
   const originalSendFile=express.response.sendFile;
@@ -42,7 +39,7 @@ new MutationObserver(mount).observe(document.documentElement,{childList:true,sub
   const originalWrite=express.response.write;
   const originalEnd=express.response.end;
   express.response.write=function(chunk,encoding,callback){if(this.req&&this.req.path==='/problem-bank.html'){if(!this.__greensumPBChunks)this.__greensumPBChunks=[];if(chunk)this.__greensumPBChunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk,encoding));return true}return originalWrite.call(this,chunk,encoding,callback)};
-  express.response.end=function(chunk,encoding,callback){if(this.req&&this.req.path==='/problem-bank.html'){if(!this.__greensumPBChunks)this.__greensumPBChunks=[];if(chunk)this.__greensumPBChunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk,encoding));const body=Buffer.concat(this.__greensumPBChunks).toString('utf8');this.__greensumPBChunks=null;return originalEnd.call(this,inject(body),encoding,callback)}return originalEnd.call(this,chunk,encoding,callback)};
+  express.response.end=function(chunk,encoding,callback){if(this.req&&this.req.path==='/problem-bank.html'){if(!this.__greensumPBChunks)this.__greensumPBChunks=[];if(chunk)this.__greensumPBChunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk,encoding));const body=Buffer.concat(this.__greensumPBChunks).toString('utf8');this.__greensumPBChunks=null;const out=Buffer.from(inject(body),'utf8');this.set('Content-Length',String(out.length));return originalEnd.call(this,out,undefined,callback)}return originalEnd.call(this,chunk,encoding,callback)};
   express.response.__greensumProblemBankFinalControls=true;
 }
 console.log('GREENSUM final problem bank controls loaded: send + sendFile + static response buffering');

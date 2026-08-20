@@ -1,11 +1,11 @@
 const express=require('express');
 const fs=require('fs');
-const path=require('path');
 
 // Final admin photo visibility fix.
-// The student page already stores photos in problem_bank_progress.photos and
-// /api/admin/problem-bank/:id already returns them. This patch makes sure the
-// admin UIs actually request and render that field.
+// The student page stores photos in problem_bank_progress.photos and
+// /api/admin/problem-bank/:id returns them. The dedicated admin page renders
+// its progress asynchronously, so the photo block must be re-attached after
+// that render instead of being inserted only at DOMContentLoaded.
 const previousSend=express.response.send;
 
 const style=`<style id="admin-problem-bank-photo-fix-style">
@@ -15,13 +15,32 @@ const style=`<style id="admin-problem-bank-photo-fix-style">
 const script=`<script id="admin-problem-bank-photo-fix-script">(function(){
 'use strict';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function idFromPath(){const m=location.pathname.match(/admin-problem-bank(?:\.html)?\\/(\\d+)$/);if(m)return Number(m[1]);const q=new URLSearchParams(location.search);return Number(q.get('id')||0)}
+function idFromPath(){const m=location.pathname.match(/admin-problem-bank(?:\\.html)?\\/(\\d+)$/);if(m)return Number(m[1]);const q=new URLSearchParams(location.search);return Number(q.get('id')||0)}
 async function getPhotoData(id){const r=await fetch('/api/admin/problem-bank/'+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||('HTTP '+r.status));return d}
 function photoHtml(photos){
  if(!Array.isArray(photos)||!photos.length)return '<div class="pb-admin-photo-empty">학생이 등록한 사진이 없습니다.</div>';
  return '<div class="pb-admin-photo-grid">'+photos.map((p,i)=>'<div class="pb-admin-photo"><img loading="lazy" src="'+esc(p.data)+'" alt="등록 사진 '+(i+1)+'"><div class="pb-admin-photo-meta"><b>'+esc(p.school||'학교 미지정')+'</b>'+esc(p.prompt||'제시물 미지정')+(p.date?' · '+esc(p.date):'')+'</div></div>').join('')+'</div>';
 }
-async function dedicated(){const id=idFromPath();if(!id)return;try{const d=await getPhotoData(id);const content=document.getElementById('content');if(!content)return;let box=document.getElementById('pbAdminPhotos');if(!box){box=document.createElement('div');box.id='pbAdminPhotos';box.className='pb-admin-photos';content.appendChild(box)}box.innerHTML='<div class="pb-admin-photos-title">📷 학생 등록 사진 ('+(Array.isArray(d.photos)?d.photos.length:0)+')</div>'+photoHtml(d.photos)}catch(e){console.warn('admin problem bank photos',e)}}
+async function dedicated(){
+ const id=idFromPath();if(!id)return;
+ try{
+   const d=await getPhotoData(id);
+   const content=document.getElementById('content');
+   if(!content)return;
+   const render=()=>{
+     let box=document.getElementById('pbAdminPhotos');
+     if(!box){box=document.createElement('div');box.id='pbAdminPhotos';box.className='pb-admin-photos';content.appendChild(box)}
+     box.innerHTML='<div class="pb-admin-photos-title">📷 학생 등록 사진 ('+(Array.isArray(d.photos)?d.photos.length:0)+')</div>'+photoHtml(d.photos);
+   };
+   // The dedicated page renders progress asynchronously and replaces #content.innerHTML.
+   // Observe that render and restore the photo block after each replacement.
+   const observer=new MutationObserver(()=>{
+     if(!document.getElementById('pbAdminPhotos'))render();
+   });
+   observer.observe(content,{childList:true,subtree:true});
+   render();
+ }catch(e){console.warn('admin problem bank photos',e)}
+}
 async function listPage(){
  const rows=document.querySelectorAll('#students .student');
  rows.forEach(async row=>{if(row.dataset.pbPhotoFix==='1')return;const id=Number(row.dataset.studentId||0);if(!id)return;row.dataset.pbPhotoFix='1';const panel=row.querySelector('.pb-progress-panel');if(!panel)return;try{const d=await getPhotoData(id);let box=panel.querySelector('.pb-admin-photos');if(!box){box=document.createElement('div');box.className='pb-admin-photos';panel.appendChild(box)}box.innerHTML='<div class="pb-admin-photos-title">📷 등록 사진 ('+(Array.isArray(d.photos)?d.photos.length:0)+')</div>'+photoHtml(d.photos)}catch(e){console.warn('admin student list photos',e)}});

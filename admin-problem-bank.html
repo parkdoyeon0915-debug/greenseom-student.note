@@ -24,7 +24,8 @@ body{margin:0;background:#f5f7fa;color:#26313b;font-family:-apple-system,BlinkMa
 .prompt b{font-size:13px;white-space:nowrap}
 .done{border-color:#b9dfc7;background:#f1faf4}.edit{border-color:#f0c4c4;background:#fff6f6}.color{border-color:#f0d49d;background:#fffaf0}.rough{border-color:#c8d8ec;background:#f4f8fd}.detail{border-color:#d8c9ec;background:#faf7ff}
 .muted{color:#7b8791;padding:14px 0}.error{color:#b42318}.loading{padding:25px 0}
-@media(max-width:700px){.wrap{padding:12px}.prompts{grid-template-columns:1fr}.top{align-items:flex-start}.top h1{font-size:21px}}
+.pb-admin-photos{margin-top:22px;border-top:1px solid #e1e6eb;padding-top:18px}.pb-admin-photos-title{font-size:17px;font-weight:900;margin-bottom:12px}.pb-admin-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}.pb-admin-photo{border:1px solid #dce2e8;border-radius:12px;background:#fff;overflow:hidden}.pb-admin-photo img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#f2f4f6}.pb-admin-photo-meta{padding:9px 10px;font-size:11px;line-height:1.45;color:#5f6b76}.pb-admin-photo-meta b{display:block;color:#26313b;font-size:12px;margin-bottom:2px}.pb-admin-photo-empty{padding:12px;border:1px dashed #dce2e8;border-radius:10px;color:#7b8791;font-size:12px}
+@media(max-width:700px){.wrap{padding:12px}.prompts{grid-template-columns:1fr}.top{align-items:flex-start}.top h1{font-size:21px}.pb-admin-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -41,6 +42,10 @@ body{margin:0;background:#f5f7fa;color:#26313b;font-family:-apple-system,BlinkMa
   const $=s=>document.querySelector(s);
   function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function cls(v){return v==='완료'?'done':v==='수정필요'?'edit':v==='채색중'?'color':v==='러프스케치'?'rough':v==='디테일스케치'?'detail':'';}
+  function photoHtml(photos){
+    if(!Array.isArray(photos)||!photos.length)return '<div class="pb-admin-photo-empty">학생이 등록한 사진이 없습니다.</div>';
+    return '<div class="pb-admin-photo-grid">'+photos.map((p,i)=>'<div class="pb-admin-photo"><img loading="lazy" src="'+esc(p.data)+'" alt="등록 사진 '+(i+1)+'"><div class="pb-admin-photo-meta"><b>'+esc(p.school||'학교 미지정')+'</b>'+esc(p.prompt||'제시물 미지정')+(p.date?' · '+esc(p.date):'')+'</div></div>').join('')+'</div>';
+  }
   const id=Number(new URLSearchParams(location.search).get('id'));
   async function load(){
     try{
@@ -62,10 +67,11 @@ body{margin:0;background:#f5f7fa;color:#26313b;font-family:-apple-system,BlinkMa
     $('#title').textContent=(p.name||'학생')+' · '+(p.username||'')+' · 문제은행 진행상황';
     const schools=Array.isArray(p.schools)?p.schools.filter(Boolean):[];
     const status=p.status&&typeof p.status==='object'?p.status:{};
+    const photos=Array.isArray(p.photos)?p.photos:[];
     const keys=Object.keys(status);
     $('#sub').textContent=schools.length?'선택 학교 '+schools.length+'개'+(p.updated_at?' · 마지막 저장 '+new Date(p.updated_at).toLocaleString('ko-KR'):''):'저장된 문제은행 진행상황';
-    if(!schools.length&&!keys.length){$('#content').innerHTML='<div class="muted">아직 선택하거나 진행한 문제가 없습니다.</div>';return;}
-    let html='<div class="summary"><span class="pill">선택 학교 '+schools.length+'개</span><span class="pill">진행 기록 '+keys.length+'개</span></div>';
+    if(!schools.length&&!keys.length&&!photos.length){$('#content').innerHTML='<div class="muted">아직 선택하거나 진행한 문제가 없습니다.</div>';return;}
+    let html='<div class="summary"><span class="pill">선택 학교 '+schools.length+'개</span><span class="pill">진행 기록 '+keys.length+'개</span><span class="pill">등록 사진 '+photos.length+'장</span></div>';
     schools.forEach(s=>{
       const entries=keys.filter(k=>k.indexOf(s+'::')===0);
       html+='<div class="school"><div class="school-title">🏫 '+esc(s)+'</div>';
@@ -75,6 +81,7 @@ body{margin:0;background:#f5f7fa;color:#26313b;font-family:-apple-system,BlinkMa
     });
     const unknown=keys.filter(k=>!schools.some(s=>k.indexOf(s+'::')===0));
     if(unknown.length)html+='<div class="school"><div class="school-title">저장된 기타 진행 기록</div><div class="prompts">'+unknown.map(k=>{const v=status[k]||'미진행';return '<div class="prompt '+cls(v)+'"><span>'+esc(k)+'</span><b>'+esc(v)+'</b></div>';}).join('')+'</div></div>';
+    html+='<section class="pb-admin-photos"><div class="pb-admin-photos-title">📷 학생 등록 사진 ('+photos.length+')</div>'+photoHtml(photos)+'</section>';
     $('#content').innerHTML=html;
   }
   load();

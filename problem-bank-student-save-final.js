@@ -52,12 +52,82 @@ async function load(){
 async function save(){
  const b=q('#pbServerSave');if(b)b.disabled=true;state('서버에 저장하는 중…');
  try{const endpoint=await resolve();
-   // 학생 계정에서는 절대 관리자 endpoint로 저장하지 않도록 최종 검증합니다.
    if(user&&user.role==='student'&&endpoint!=='/api/problem-bank')throw Error('학생 계정 저장 경로가 잘못 지정되었습니다.');
    const r=await fetch(endpoint,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify(readScreen())});
    const d=await r.json().catch(()=>({}));if(!r.ok)throw Error((d.error||'HTTP '+r.status)+(d.code?' ['+d.code+']':''));
    applyServer(d);state('✓ 서버에 안전하게 저장되었습니다.','ok');const last=q('#pbServerLastSaved');if(last)last.textContent=d.updated_at?'마지막 저장 · '+new Date(d.updated_at).toLocaleString('ko-KR'):'저장 완료';
  }catch(e){console.error('problem-bank student final save',e);state('서버 저장 실패','err');const last=q('#pbServerLastSaved');if(last)last.textContent=e.message||String(e)}finally{if(b)b.disabled=false}
+}
+
+// 모바일 사진 저장 보강:
+// 기존 페이지는 원본 사진을 그대로 Base64로 localStorage에 넣어 모바일 저장 용량을 쉽게 초과할 수 있습니다.
+// 사진 저장 버튼을 캡처해 원본을 자동 축소/압축한 뒤 저장하고, 실패 시 사용자에게 원인을 표시합니다.
+const PHOTO_KEY='greensum_problem_bank_photos';
+let photoSaveBusy=false;
+function readPhotoList(){try{const v=JSON.parse(nativeGet.call(localStorage,PHOTO_KEY)||'[]');return Array.isArray(v)?v:[]}catch(e){return []}}
+function writePhotoList(list){
+  try{nativeSet.call(localStorage,PHOTO_KEY,JSON.stringify(list));return true}
+  catch(e){console.error('problem-bank photo localStorage save failed',e);return false}
+}
+function compressFile(file,maxSide=1600,quality=.78){
+ return new Promise((resolve,reject)=>{
+   if(!file)return reject(new Error('사진 파일을 찾을 수 없습니다.'));
+   const done=(source,w,h)=>{
+     try{
+       const scale=Math.min(1,maxSide/Math.max(w,h));
+       const cw=Math.max(1,Math.round(w*scale)),ch=Math.max(1,Math.round(h*scale));
+       const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
+       const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw new Error('이미지 처리 기능을 사용할 수 없습니다.');
+       ctx.drawImage(source,0,0,cw,ch);
+       canvas.toBlob(blob=>{if(!blob)return reject(new Error('사진 압축에 실패했습니다.'));resolve(blob)},'image/jpeg',quality);
+     }catch(e){reject(e)}
+   };
+   if(typeof createImageBitmap==='function'){
+     createImageBitmap(file,{imageOrientation:'from-image'}).then(bitmap=>{done(bitmap,bitmap.width,bitmap.height);if(bitmap.close)bitmap.close()}).catch(()=>fallback());
+   }else fallback();
+   function fallback(){
+     const url=URL.createObjectURL(file),img=new Image();
+     img.onload=()=>{done(img,img.naturalWidth,img.naturalHeight);URL.revokeObjectURL(url)};
+     img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('사진을 읽을 수 없습니다.'))};img.src=url;
+   }
+ });
+}
+function blobToDataURL(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error('사진 변환에 실패했습니다.'));r.readAsDataURL(blob)})}
+async function savePhotoMobile(){
+ if(photoSaveBusy)return;photoSaveBusy=true;
+ const btn=q('#savePhoto');if(btn)btn.disabled=true;
+ try{
+   const file=q('#file')?.files?.[0];
+   const school=q('#photoSchool')?.value||'';
+   const prompt=q('#photoPrompt')?.value||'';
+   if(!file)throw new Error('사진을 다시 선택해주세요.');
+   if(!school||!prompt)throw new Error('학교와 제시물을 선택해주세요.');
+   const blob=await compressFile(file);
+   const data=await blobToDataURL(blob);
+   const list=readPhotoList();
+   list.unshift({school,prompt,data,date:new Date().toLocaleDateString('ko-KR')});
+   if(!writePhotoList(list))throw new Error('사진 저장 공간이 부족합니다. 사진첩에서 오래된 사진을 먼저 삭제해주세요.');
+   if(typeof window.load==='function')window.load();
+   if(typeof window.renderGallery==='function')window.renderGallery();
+   const modal=q('#modal');if(modal)modal.classList.remove('open');
+   const preview=q('#preview');if(preview){preview.style.display='none';preview.src=''}
+   state('✓ 사진이 저장되었습니다.','ok');
+ }catch(e){
+   console.error('problem-bank mobile photo save',e);
+   alert(e&&e.message?e.message:'사진 저장에 실패했습니다.');
+ }finally{photoSaveBusy=false;if(btn)btn.disabled=false}
+}
+function installPhotoSaveCapture(){
+ if(window.__greensumProblemBankPhotoSaveCapture)return;
+ window.__greensumProblemBankPhotoSaveCapture=true;
+ document.addEventListener('click',function(e){
+   const b=e.target&&e.target.closest?e.target.closest('#savePhoto'):null;
+   if(!b)return;
+   e.preventDefault();
+   e.stopPropagation();
+   if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+   savePhotoMobile();
+ },true);
 }
 function replaceControls(){
  const box=q('#problemBankServerControls');if(!box)return false;
@@ -75,11 +145,13 @@ function installSaveCapture(){
    if(b.disabled){b.disabled=false}
    e.preventDefault();
    e.stopPropagation();
+   if(e.stopImmediatePropagation)e.stopImmediatePropagation();
    save();
  },true);
 }
 async function boot(){
  installSaveCapture();
+ installPhotoSaveCapture();
  if(!replaceControls()){setTimeout(boot,100);return}
  try{await load()}catch(e){console.error(e)}
 }

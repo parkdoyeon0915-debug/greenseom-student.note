@@ -122,6 +122,9 @@ async function savePhotoMobile(){
    const modal=q('#modal');if(modal)modal.classList.remove('open');
    const preview=q('#preview');if(preview){preview.style.display='none';preview.src=''}
    state('✓ 사진이 저장되었습니다.','ok');
+   // 모바일에서는 기존 페이지의 사진첩 상태와 저장 데이터가 어긋나는 경우가 있어
+   // 저장 완료 후 페이지를 새로 읽어 localStorage의 최신 사진 목록을 확실하게 반영합니다.
+   setTimeout(()=>location.reload(),120);
  }catch(e){
    console.error('problem-bank mobile photo save',e);
    alert(e&&e.message?e.message:'사진 저장에 실패했습니다.');

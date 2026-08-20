@@ -1,9 +1,11 @@
 const express=require('express');
+const fs=require('fs');
+const path=require('path');
 
 // Final admin photo visibility fix.
 // The student page already stores photos in problem_bank_progress.photos and
-// /api/admin/problem-bank/:id already returns them. This patch only makes sure
-// the admin UIs actually request and render that field.
+// /api/admin/problem-bank/:id already returns them. This patch makes sure the
+// admin UIs actually request and render that field.
 const previousSend=express.response.send;
 
 const style=`<style id="admin-problem-bank-photo-fix-style">
@@ -35,5 +37,19 @@ express.response.send=function(body){
    else if(this.req.path==='/admin.html')body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');
  }
  return previousSend.call(this,body);
+};
+
+// admin-problem-bank.html is served through res.sendFile(), which bypasses res.send.
+// Convert only that page to res.send so the same photo UI injection is applied.
+const previousSendFile=express.response.sendFile;
+express.response.sendFile=function(filePath,...args){
+ if(this.req?.path==='/admin-problem-bank.html'){
+   try{
+     let body=fs.readFileSync(filePath,'utf8');
+     body=body.replace('</head>',style+'</head>').replace('</body>',script+'</body>');
+     return this.type('html').send(body);
+   }catch(e){return args[1]&&typeof args[1]==='function'?args[1](e):this.status(500).send('관리자 문제은행 페이지를 불러오지 못했습니다.');}
+ }
+ return previousSendFile.call(this,filePath,...args);
 };
 console.log('GREENSUM admin problem bank photo visibility fix loaded');

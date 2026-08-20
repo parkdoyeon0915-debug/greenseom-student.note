@@ -1,0 +1,5 @@
+const express=require('express');
+const prev=express.response.send;
+const patch=`<script id="problem-bank-photo-payload-fix">(function(){const nativeFetch=window.fetch;window.fetch=function(input,init){try{const url=typeof input==='string'?input:(input&&input.url)||'';const method=String((init&&init.method)||((input&&input.method)||'GET')).toUpperCase();if(method==='PUT'&&/\\/api\\/(?:admin\\/)?problem-bank(?:\\/\\d+)?$/.test(new URL(url,location.href).pathname)&&init&&typeof init.body==='string'){const body=JSON.parse(init.body);if(body&&Object.prototype.hasOwnProperty.call(body,'photos')){delete body.photos;init={...init,body:JSON.stringify(body)}}}}catch(e){}return nativeFetch.call(this,input,init)}})();</script>`;
+express.response.send=function(body){if(typeof body==='string'&&this.req?.path==='/problem-bank.html'&&body.includes('</body>')&&!body.includes('id="problem-bank-photo-payload-fix"'))body=body.replace('</body>',patch+'</body>');return prev.call(this,body)};
+console.log('GREENSUM problem bank photo payload fix loaded');

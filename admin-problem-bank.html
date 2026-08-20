@@ -42,9 +42,16 @@ body{margin:0;background:#f5f7fa;color:#26313b;font-family:-apple-system,BlinkMa
   const $=s=>document.querySelector(s);
   function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function cls(v){return v==='완료'?'done':v==='수정필요'?'edit':v==='채색중'?'color':v==='러프스케치'?'rough':v==='디테일스케치'?'detail':'';}
+  function photoSrc(v){
+    const s=String(v??'').trim();
+    if(!s)return '';
+    if(/^data:/i.test(s)||/^(https?:)?\/\//i.test(s)||s.startsWith('/'))return s;
+    if(/^image\/[a-z0-9.+-]+;base64,/i.test(s))return 'data:'+s;
+    return s;
+  }
   function photoHtml(photos){
     if(!Array.isArray(photos)||!photos.length)return '<div class="pb-admin-photo-empty">학생이 등록한 사진이 없습니다.</div>';
-    return '<div class="pb-admin-photo-grid">'+photos.map((p,i)=>'<div class="pb-admin-photo"><img loading="lazy" src="'+esc(p.data)+'" alt="등록 사진 '+(i+1)+'"><div class="pb-admin-photo-meta"><b>'+esc(p.school||'학교 미지정')+'</b>'+esc(p.prompt||'제시물 미지정')+(p.date?' · '+esc(p.date):'')+'</div></div>').join('')+'</div>';
+    return '<div class="pb-admin-photo-grid">'+photos.map((p,i)=>'<div class="pb-admin-photo"><img loading="lazy" src="'+esc(photoSrc(p.data))+'" alt="등록 사진 '+(i+1)+'"><div class="pb-admin-photo-meta"><b>'+esc(p.school||'학교 미지정')+'</b>'+esc(p.prompt||'제시물 미지정')+(p.date?' · '+esc(p.date):'')+'</div></div>').join('')+'</div>';
   }
   const id=Number(new URLSearchParams(location.search).get('id'));
   async function load(){
@@ -87,6 +94,5 @@ body{margin:0;background:#f5f7fa;color:#26313b;font-family:-apple-system,BlinkMa
   load();
 })();
 </script>
-<!-- PHOTO_RENDER_DEPLOY_CHECK: 2026-08-21 -->
 </body>
 </html>

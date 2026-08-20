@@ -60,14 +60,23 @@ async function save(){
 }
 
 // 모바일 사진 저장 보강:
-// 기존 페이지는 원본 사진을 그대로 Base64로 localStorage에 넣어 모바일 저장 용량을 쉽게 초과할 수 있습니다.
-// 사진 저장 버튼을 캡처해 원본을 자동 축소/압축한 뒤 저장하고, 실패 시 사용자에게 원인을 표시합니다.
+// 원본 사진은 모바일 localStorage 용량을 쉽게 초과할 수 있으므로 자동 축소/압축합니다.
+// 또한 원래 페이지가 파일 input의 value를 비우기 때문에, 선택한 File 객체를 별도로 보존합니다.
 const PHOTO_KEY='greensum_problem_bank_photos';
 let photoSaveBusy=false;
+let selectedPhotoFile=null;
 function readPhotoList(){try{const v=JSON.parse(nativeGet.call(localStorage,PHOTO_KEY)||'[]');return Array.isArray(v)?v:[]}catch(e){return []}}
 function writePhotoList(list){
   try{nativeSet.call(localStorage,PHOTO_KEY,JSON.stringify(list));return true}
   catch(e){console.error('problem-bank photo localStorage save failed',e);return false}
+}
+function capturePhotoFile(){
+ const input=q('#file');
+ if(!input)return false;
+ if(input.dataset.pbPhotoCapture==='1')return true;
+ input.dataset.pbPhotoCapture='1';
+ input.addEventListener('change',function(){selectedPhotoFile=this.files&&this.files[0]?this.files[0]:null},true);
+ return true;
 }
 function compressFile(file,maxSide=1600,quality=.78){
  return new Promise((resolve,reject)=>{
@@ -97,7 +106,7 @@ async function savePhotoMobile(){
  if(photoSaveBusy)return;photoSaveBusy=true;
  const btn=q('#savePhoto');if(btn)btn.disabled=true;
  try{
-   const file=q('#file')?.files?.[0];
+   const file=selectedPhotoFile||q('#file')?.files?.[0];
    const school=q('#photoSchool')?.value||'';
    const prompt=q('#photoPrompt')?.value||'';
    if(!file)throw new Error('사진을 다시 선택해주세요.');
@@ -107,6 +116,7 @@ async function savePhotoMobile(){
    const list=readPhotoList();
    list.unshift({school,prompt,data,date:new Date().toLocaleDateString('ko-KR')});
    if(!writePhotoList(list))throw new Error('사진 저장 공간이 부족합니다. 사진첩에서 오래된 사진을 먼저 삭제해주세요.');
+   selectedPhotoFile=null;
    if(typeof window.load==='function')window.load();
    if(typeof window.renderGallery==='function')window.renderGallery();
    const modal=q('#modal');if(modal)modal.classList.remove('open');
@@ -120,6 +130,7 @@ async function savePhotoMobile(){
 function installPhotoSaveCapture(){
  if(window.__greensumProblemBankPhotoSaveCapture)return;
  window.__greensumProblemBankPhotoSaveCapture=true;
+ capturePhotoFile();
  document.addEventListener('click',function(e){
    const b=e.target&&e.target.closest?e.target.closest('#savePhoto'):null;
    if(!b)return;

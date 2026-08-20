@@ -66,7 +66,20 @@ function replaceControls(){
  if(oldSave&&!oldSave.dataset.studentFinal){const n=oldSave.cloneNode(true);n.dataset.studentFinal='1';n.onclick=save;oldSave.replaceWith(n)}
  return true;
 }
+function installSaveCapture(){
+ if(window.__greensumProblemBankSaveCapture)return;
+ window.__greensumProblemBankSaveCapture=true;
+ document.addEventListener('click',function(e){
+   const b=e.target&&e.target.closest?e.target.closest('#pbServerSave'):null;
+   if(!b)return;
+   if(b.disabled){b.disabled=false}
+   e.preventDefault();
+   e.stopPropagation();
+   save();
+ },true);
+}
 async function boot(){
+ installSaveCapture();
  if(!replaceControls()){setTimeout(boot,100);return}
  try{await load()}catch(e){console.error(e)}
 }

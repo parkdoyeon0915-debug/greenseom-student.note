@@ -63,7 +63,7 @@ function replaceControls(){
  const box=q('#problemBankServerControls');if(!box)return false;
  const oldLoad=q('#pbServerLoad'),oldSave=q('#pbServerSave');
  if(oldLoad&&!oldLoad.dataset.studentFinal){const n=oldLoad.cloneNode(true);n.dataset.studentFinal='1';n.onclick=load;oldLoad.replaceWith(n)}
- if(oldSave&&!oldSave.dataset.studentFinal){const n=oldSave.cloneNode(true);n.dataset.studentFinal='1';n.onclick=save;n.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation()},true);oldSave.replaceWith(n)}
+ if(oldSave&&!oldSave.dataset.studentFinal){const n=oldSave.cloneNode(true);n.dataset.studentFinal='1';n.onclick=save;oldSave.replaceWith(n)}
  return true;
 }
 async function boot(){

@@ -1,4 +1,4 @@
-// Problem bank persistence is implemented in the server-authoritative core.
-// Keep the original require path used by start.js and add the photo payload guard.
-require('./problem-bank-photo-server-core.js');
+// Problem bank persistence: server-authoritative photo storage.
+// Photos are kept in PostgreSQL and are never mirrored into browser localStorage.
+require('./problem-bank-photo-server-core-v2.js');
 require('./problem-bank-photo-payload-fix.js');

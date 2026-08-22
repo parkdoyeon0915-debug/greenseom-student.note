@@ -1,59 +1,45 @@
 const fs = require('fs');
 const path = require('path');
 
+// Diagnosis photo preview only. Upload/save behavior is untouched.
 try {
   const file = path.join(__dirname, 'public', 'index.html');
   let html = fs.readFileSync(file, 'utf8');
-  const marker = '/* GREENSUM_MOBILE_PHOTO_FIX_V3 */';
-
+  const marker = 'GREENSUM_DIAG_PHOTO_PREVIEW_V4';
   if (!html.includes(marker)) {
-    const start = html.indexOf('function bindPhoto(');
-    const end = html.indexOf('function newDiag(', start);
-
-    if (start === -1 || end === -1) {
-      throw new Error('bindPhoto/newDiag boundary was not found in public/index.html');
-    }
-
-    const replacement = `${marker}
-function bindPhoto(id,boxId,type){
-const input=$(id),box=$(boxId);if(!input||!box)return;
-const handle=()=>{
-  const f=input.files&&input.files[0];
-  if(!f)return;
-  if(!f.type||!f.type.startsWith('image/')){alert('이미지 파일만 선택할 수 있습니다.');input.value='';return}
-  if(type==='diag')diagSelectedFile=f;else patSelectedFile=f;
-  let img=box.querySelector('.preview-photo');
-  if(!img){
-    img=document.createElement('img');
-    img.className='preview-photo';
-    img.alt='선택한 사진';
-    img.style.cssText='position:absolute;inset:0;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;z-index:1;background:#fafbfc;';
-    box.appendChild(img);
+    const script = `<script id="${marker}">
+(function(){
+  function install(){
+    var input=document.getElementById('diagFile');
+    var box=document.getElementById('diagPhoto');
+    if(!input||!box||input.dataset.previewV4==='1') return;
+    input.dataset.previewV4='1';
+    input.addEventListener('change',function(){
+      var file=input.files&&input.files[0];
+      if(!file || !/^image\\//i.test(file.type)) return;
+      window.diagSelectedFile=file;
+      var old=box.querySelector('[data-diag-preview-v4]');
+      if(old) old.remove();
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        var img=document.createElement('img');
+        img.setAttribute('data-diag-preview-v4','1');
+        img.src=ev.target.result;
+        img.alt='선택한 그림 사진';
+        img.style.cssText='position:absolute;inset:0;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#fafbfc;z-index:10;display:block;';
+        box.appendChild(img);
+        var ph=box.querySelector('.photo-placeholder');
+        if(ph) ph.style.visibility='hidden';
+      };
+      reader.readAsDataURL(file);
+    });
   }
-  const ph=box.querySelector('.photo-placeholder,.pattern-placeholder');
-  if(ph)ph.style.display='none';
-  try{
-    if(img.dataset.objectUrl)URL.revokeObjectURL(img.dataset.objectUrl);
-    const url=URL.createObjectURL(f);
-    img.dataset.objectUrl=url;
-    img.src=url;
-  }catch(e){
-    const reader=new FileReader();
-    reader.onload=ev=>{img.src=ev.target.result};
-    reader.readAsDataURL(f);
-  }
-};
-input.addEventListener('change',handle);
-input.addEventListener('input',handle);
-}
-`;
-
-    html = html.slice(0, start) + replacement + html.slice(end);
-    fs.writeFileSync(file, html, 'utf8');
-    console.log('[student-mobile-photo-fix] V3 mobile diagnosis photo picker patched');
-  } else {
-    console.log('[student-mobile-photo-fix] V3 patch already applied');
-  }
-} catch (err) {
-  console.error('[student-mobile-photo-fix] failed:', err.message);
-}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
+  setTimeout(install,500);setTimeout(install,1500);
+})();
+</script>`;
+    html = html.replace('</body>',script+'</body>');
+    fs.writeFileSync(file,html,'utf8');
+    console.log('[student-mobile-photo-fix] V4 diagnosis photo preview installed');
+  } else console.log('[student-mobile-photo-fix] V4 already installed');
+} catch(err){ console.error('[student-mobile-photo-fix] failed:',err.message); }
